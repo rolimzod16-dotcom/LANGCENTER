@@ -1,0 +1,43 @@
+{
+  "name": "Lang Center",
+  "short_name": "Lang Center",
+  "description": "Кабинет учителя и ученика языкового центра",
+  "start_url": "/app",
+  "display": "standalone",
+  "background_color": "#f4f4f5",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait",
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "/icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Вход учителя",
+      "url": "/teacher/login",
+      "description": "Открыть кабинет учителя"
+    },
+    {
+      "name": "Вход ученика",
+      "url": "/student/login",
+      "description": "Открыть кабинет ученика"
+    }
+  ]
+}

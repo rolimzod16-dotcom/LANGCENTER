@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { AppShell } from "@/components/layout/AppShell";
+import { InstallBanner } from "@/components/mobile/InstallBanner";
 
 export default function TeacherLoginPage() {
   const router = useRouter();
@@ -31,38 +31,61 @@ export default function TeacherLoginPage() {
   }
 
   return (
-    <AppShell title="Вход учителя" subtitle="Код TCH-2026-XXXXXX + пароль">
-      <form
-        onSubmit={handleSubmit}
-        className="max-w-md rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm"
-      >
-        <input
-          required
-          placeholder="TCH-2026-XXXXXX"
-          value={code}
-          onChange={(e) => setCode(e.target.value.toUpperCase())}
-          className="mb-3 w-full rounded-lg border border-zinc-300 px-3 py-2 font-mono uppercase"
-        />
-        <input
-          required
-          type="password"
-          placeholder="Пароль"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="mb-3 w-full rounded-lg border border-zinc-300 px-3 py-2"
-        />
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-lg bg-indigo-600 py-2.5 font-medium text-white disabled:opacity-60"
+    <div className="min-h-dvh bg-zinc-50">
+      <main className="safe-top safe-bottom mx-auto max-w-lg px-4 py-8">
+        <Link href="/app" className="text-sm text-indigo-600">
+          ← Назад
+        </Link>
+
+        <div className="mt-6">
+          <p className="text-sm font-semibold text-indigo-600">Учитель</p>
+          <h1 className="text-2xl font-bold text-zinc-900">Вход</h1>
+          <p className="mt-1 text-sm text-zinc-500">
+            Код TCH-2026-XXXXXX и пароль от админа
+          </p>
+        </div>
+
+        <div className="mt-6">
+          <InstallBanner />
+        </div>
+
+        <form
+          onSubmit={handleSubmit}
+          className="mt-2 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm"
         >
-          {loading ? "Вход..." : "Войти"}
-        </button>
-        {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-      </form>
-      <Link href="/" className="mt-4 inline-block text-sm text-indigo-600">
-        ← На главную
-      </Link>
-    </AppShell>
+          <label className="mb-1 block text-sm font-medium text-zinc-700">
+            Код
+          </label>
+          <input
+            required
+            placeholder="TCH-2026-XXXXXX"
+            value={code}
+            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            autoComplete="username"
+            className="mb-4 w-full rounded-xl border border-zinc-300 px-4 py-3 font-mono uppercase"
+          />
+          <label className="mb-1 block text-sm font-medium text-zinc-700">
+            Пароль
+          </label>
+          <input
+            required
+            type="password"
+            placeholder="Пароль"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            className="mb-4 w-full rounded-xl border border-zinc-300 px-4 py-3"
+          />
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full rounded-xl bg-indigo-600 py-3.5 text-base font-semibold text-white disabled:opacity-60"
+          >
+            {loading ? "Вход..." : "Войти"}
+          </button>
+          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+        </form>
+      </main>
+    </div>
   );
 }
