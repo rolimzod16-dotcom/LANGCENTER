@@ -1,18 +1,65 @@
 import { NextRequest, NextResponse } from "next/server";
-import { assignStudentToTeacher, getTeacherForStudent } from "@/lib/groups";
+import {
+  assignStudentToTeacher,
+  getTeacherNamesByStudentIds,
+} from "@/lib/groups";
 import { ensureStudentPaymentForMonth } from "@/lib/payments";
-import { createStudent, listStudents } from "@/lib/students";
+import {
+  createStudent,
+  getStudentsSummary,
+  listStudentsPage,
+  type StudentListStatus,
+} from "@/lib/students";
 
-export async function GET() {
+const STATUSES = new Set<StudentListStatus>(["all", "active", "inactive"]);
+
+export async function GET(request: NextRequest) {
   try {
-    const students = await listStudents();
-    const enriched = await Promise.all(
-      students.map(async (s) => {
-        const teacher = await getTeacherForStudent(s.id);
-        return { ...s, teacher_name: teacher?.teacher_name ?? null };
-      }),
+    const params = request.nextUrl.searchParams;
+    const summaryOnly = params.get("summary_only") === "1";
+    const page = Number(params.get("page") ?? "1");
+    const limit = Number(params.get("limit") ?? "50");
+    const search = params.get("search") ?? "";
+    const teacherId = params.get("teacher_id") ?? "";
+    const statusParam = params.get("status") ?? "all";
+    const status = STATUSES.has(statusParam as StudentListStatus)
+      ? (statusParam as StudentListStatus)
+      : "all";
+
+    if (summaryOnly) {
+      const summary = await getStudentsSummary();
+      return NextResponse.json({ summary });
+    }
+
+    const result = await listStudentsPage({
+      page,
+      limit,
+      search,
+      teacher_id: teacherId || undefined,
+      status,
+    });
+
+    const teacherNames = await getTeacherNamesByStudentIds(
+      result.students.map((s) => s.id),
     );
-    return NextResponse.json({ students: enriched });
+
+    const enriched = result.students.map((s) => ({
+      ...s,
+      teacher_name: teacherNames.get(s.id) ?? null,
+    }));
+
+    const summary = await getStudentsSummary();
+
+    return NextResponse.json({
+      students: enriched,
+      pagination: {
+        total: result.total,
+        page: result.page,
+        limit: result.limit,
+        total_pages: result.total_pages,
+      },
+      summary,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ошибка загрузки";
     return NextResponse.json({ error: message }, { status: 500 });

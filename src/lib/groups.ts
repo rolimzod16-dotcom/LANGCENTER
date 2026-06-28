@@ -26,6 +26,56 @@ export async function assignStudentToTeacher(
   return { group_id: group.id };
 }
 
+export async function getTeacherNamesByStudentIds(
+  studentIds: string[],
+): Promise<Map<string, string>> {
+  const map = new Map<string, string>();
+  if (!studentIds.length) return map;
+
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return map;
+
+  const { data, error } = await supabase
+    .from("group_students")
+    .select("student_id, groups(teachers(full_name))")
+    .in("student_id", studentIds);
+
+  if (error) return map;
+
+  for (const row of data ?? []) {
+    const g = row.groups as unknown as { teachers: { full_name: string } } | null;
+    if (g?.teachers?.full_name) {
+      map.set(row.student_id, g.teachers.full_name);
+    }
+  }
+
+  return map;
+}
+
+export async function getStudentIdsForTeacher(teacherId: string) {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase не настроен");
+
+  const { data: groups, error: gErr } = await supabase
+    .from("groups")
+    .select("id")
+    .eq("teacher_id", teacherId);
+
+  if (gErr) throw new Error(gErr.message);
+  if (!groups?.length) return [];
+
+  const { data: links, error } = await supabase
+    .from("group_students")
+    .select("student_id")
+    .in(
+      "group_id",
+      groups.map((g) => g.id),
+    );
+
+  if (error) throw new Error(error.message);
+  return [...new Set((links ?? []).map((l) => l.student_id))];
+}
+
 export async function getTeacherForStudent(studentId: string) {
   const supabase = getSupabaseServerClient();
   if (!supabase) return null;

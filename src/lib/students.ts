@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
 import { customAlphabet } from "nanoid";
+import { getStudentIdsForTeacher } from "@/lib/groups";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 const generateCodePart = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 6);
@@ -80,16 +81,117 @@ async function generateUniqueCode(
   throw new Error("Не удалось сгенерировать код");
 }
 
+export type StudentListStatus = "all" | "active" | "inactive";
+
+export type StudentsListQuery = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  teacher_id?: string;
+  status?: StudentListStatus;
+};
+
+export type StudentsSummary = {
+  total: number;
+  active: number;
+};
+
+export type PaginatedStudents = {
+  students: StudentRow[];
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+};
+
+const STUDENT_LIST_COLUMNS =
+  "id, full_name, phone, student_code, status, created_at, start_date, payment_due_day";
+
+export async function getStudentsSummary(): Promise<StudentsSummary> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase не настроен. Проверь .env.local");
+
+  const { count: total } = await supabase
+    .from("students")
+    .select("id", { count: "exact", head: true });
+
+  const { count: active } = await supabase
+    .from("students")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "active");
+
+  return {
+    total: total ?? 0,
+    active: active ?? 0,
+  };
+}
+
+export async function listStudentsPage(
+  query: StudentsListQuery = {},
+): Promise<PaginatedStudents> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase не настроен. Проверь .env.local");
+
+  const page = Math.max(1, query.page ?? 1);
+  const limit = Math.min(Math.max(query.limit ?? 50, 1), 100);
+  const search = query.search?.trim() ?? "";
+  const status = query.status ?? "all";
+
+  let teacherStudentIds: string[] | null = null;
+  if (query.teacher_id) {
+    teacherStudentIds = await getStudentIdsForTeacher(query.teacher_id);
+    if (teacherStudentIds.length === 0) {
+      return { students: [], total: 0, page: 1, limit, total_pages: 1 };
+    }
+  }
+
+  let dbQuery = supabase
+    .from("students")
+    .select(STUDENT_LIST_COLUMNS, { count: "exact" });
+
+  if (status === "active") dbQuery = dbQuery.eq("status", "active");
+  if (status === "inactive") dbQuery = dbQuery.neq("status", "active");
+
+  if (teacherStudentIds) {
+    dbQuery = dbQuery.in("id", teacherStudentIds);
+  }
+
+  if (search) {
+    const pattern = `%${search}%`;
+    dbQuery = dbQuery.or(
+      `full_name.ilike.${pattern},student_code.ilike.${pattern},phone.ilike.${pattern}`,
+    );
+  }
+
+  const from = (page - 1) * limit;
+  const to = from + limit - 1;
+
+  const { data, error, count } = await dbQuery
+    .order("full_name", { ascending: true })
+    .range(from, to);
+
+  if (error) throw new Error(error.message);
+
+  const total = count ?? 0;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+
+  return {
+    students: (data as DbStudent[]).map(mapStudent),
+    total,
+    page: Math.min(page, totalPages),
+    limit,
+    total_pages: totalPages,
+  };
+}
+
 export async function listStudents(): Promise<StudentRow[]> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен. Проверь .env.local");
 
   const { data, error } = await supabase
     .from("students")
-    .select(
-      "id, full_name, phone, student_code, status, created_at, start_date, payment_due_day",
-    )
-    .order("created_at", { ascending: false });
+    .select(STUDENT_LIST_COLUMNS)
+    .order("full_name", { ascending: true });
 
   if (error) throw new Error(error.message);
   return (data as DbStudent[]).map(mapStudent);
