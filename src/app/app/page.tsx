@@ -18,6 +18,13 @@ export default function MobileAppPage() {
 
         <ApkDownloadButton />
 
+        <Link
+          href="/download"
+          className="mb-4 block text-center text-sm text-indigo-600 underline"
+        >
+          Подробная инструкция по установке →
+        </Link>
+
         <div className="my-4 rounded-2xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
           <p className="font-medium text-zinc-900">Как установить APK</p>
           <ol className="mt-2 list-decimal space-y-1 pl-5">
