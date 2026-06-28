@@ -28,15 +28,38 @@ export default function DownloadPage() {
           <ApkDownloadButton />
         </div>
 
-        <div className="lc-card mt-6 p-5 text-sm text-slate-600">
+        <div className="lc-card mt-6 border-amber-200 bg-amber-50 p-5 text-sm text-amber-950">
+          <p className="font-bold">Телефон пишет «файл опасен»?</p>
+          <p className="mt-2 leading-relaxed">
+            Это стандартная защита Android для APK не из Google Play. Lang Center
+            — ваше приложение центра. Нажмите{" "}
+            <strong>«Загрузить всё равно»</strong> — файл скачивается с{" "}
+            <strong>langcenter.vercel.app</strong>, не со стороннего сайта.
+          </p>
+        </div>
+
+        <div className="lc-card mt-4 p-5 text-sm text-slate-600">
           <p className="font-bold text-slate-900">Инструкция</p>
           <ol className="mt-3 list-decimal space-y-2 pl-5 leading-relaxed">
             <li>Нажмите зелёную кнопку выше</li>
+            <li>Если спросит — «Загрузить всё равно»</li>
             <li>Дождитесь загрузки ({APK_SIZE_MB} МБ)</li>
             <li>Откройте файл в «Загрузках»</li>
-            <li>Разрешите установку, если спросит</li>
+            <li>Разрешите установку из браузера, если спросит</li>
             <li>Войдите с кодом от центра</li>
           </ol>
+        </div>
+
+        <div className="lc-card-flat mt-4 p-5 text-sm text-slate-600">
+          <p className="font-bold text-indigo-900">Без предупреждения (рекомендуем)</p>
+          <p className="mt-2 leading-relaxed">
+            Откройте{" "}
+            <Link href="/app" className="font-medium text-indigo-600 underline">
+              /app
+            </Link>{" "}
+            в Chrome → меню ⋮ → «Установить приложение». Работает так же, без
+            скачивания APK.
+          </p>
         </div>
 
         <p className="mt-6 text-center text-xs text-slate-400">

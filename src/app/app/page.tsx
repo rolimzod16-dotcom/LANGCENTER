@@ -15,7 +15,14 @@ export default function MobileAppPage() {
           </p>
         </div>
 
-        <div className="mt-8 space-y-3">
+        <div className="mt-8">
+          <InstallBanner />
+        </div>
+
+        <div className="mt-6 space-y-3">
+          <p className="text-center text-xs font-semibold uppercase tracking-widest text-slate-400">
+            или скачать APK
+          </p>
           <ApkDownloadButton />
           <Link
             href="/download"
@@ -23,20 +30,6 @@ export default function MobileAppPage() {
           >
             Инструкция по установке →
           </Link>
-        </div>
-
-        <div className="lc-card-flat mt-6 p-4 text-sm text-slate-600">
-          <p className="font-semibold text-slate-800">Быстрая установка</p>
-          <ol className="mt-2 list-decimal space-y-1.5 pl-5 leading-relaxed">
-            <li>Скачайте APK</li>
-            <li>Откройте файл в «Загрузках»</li>
-            <li>Разрешите установку</li>
-            <li>Войдите с кодом от центра</li>
-          </ol>
-        </div>
-
-        <div className="mt-4">
-          <InstallBanner />
         </div>
 
         <p className="mt-8 text-center text-xs font-semibold uppercase tracking-widest text-slate-400">
