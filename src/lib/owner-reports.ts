@@ -1,8 +1,15 @@
 import {
   currentPeriodMonth,
+  getDuePaymentsOnDate,
+  getMonthDailyBreakdown,
   getOwnerPaymentsForMonth,
+  listPaymentsReceivedOnDate,
   paginateOwnerPayments,
+  summarizeDailyDue,
+  summarizeDailyReceived,
   summarizeOwnerPayments,
+  type DailyBreakdownRow,
+  type DailyReportSection,
   type OwnerPaymentsQuery,
   type PaginatedOwnerPayments,
   type PaymentListFilter,
@@ -29,6 +36,29 @@ export type OwnerReportSummary = {
 };
 
 export type OwnerReportList = OwnerReportSummary & {
+  payments: StudentPayment[];
+  daily_breakdown: DailyBreakdownRow[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    total_pages: number;
+  };
+};
+
+export type OwnerDailyReport = {
+  view: "day";
+  date: string;
+  updated_at: string;
+  summary: {
+    received_total: number;
+    received_count: number;
+    due_today_total: number;
+    due_today_count: number;
+    due_today_unpaid_total: number;
+    due_today_unpaid_count: number;
+  };
+  section: DailyReportSection;
   payments: StudentPayment[];
   pagination: {
     total: number;
@@ -93,6 +123,39 @@ export async function getOwnerReportList(
       ...counts,
       ...paymentSummary,
     },
+    payments: page.items,
+    daily_breakdown: getMonthDailyBreakdown(payments),
+    pagination: {
+      total: page.total,
+      page: page.page,
+      limit: page.limit,
+      total_pages: page.total_pages,
+    },
+  };
+}
+
+export async function getOwnerDailyReport(
+  date: string,
+  section: DailyReportSection = "received",
+  options: Omit<OwnerPaymentsQuery, "periodMonth" | "filter"> = {},
+): Promise<OwnerDailyReport> {
+  const [received, due] = await Promise.all([
+    listPaymentsReceivedOnDate(date),
+    getDuePaymentsOnDate(date),
+  ]);
+
+  const source = section === "received" ? received : due;
+  const page = paginateOwnerPayments(source, options);
+
+  return {
+    view: "day",
+    date,
+    updated_at: new Date().toISOString(),
+    summary: {
+      ...summarizeDailyReceived(received),
+      ...summarizeDailyDue(due),
+    },
+    section,
     payments: page.items,
     pagination: {
       total: page.total,

@@ -408,8 +408,97 @@ export async function markPaymentPaid(paymentId: string, amountPaid?: number) {
   return mapPayment(data);
 }
 
+export function periodMonthFromDate(date: string): string {
+  const [y, m] = date.split("-");
+  return `${y}-${m}-01`;
+}
+
+function nextDayIso(date: string): string {
+  const d = new Date(`${date}T12:00:00`);
+  d.setDate(d.getDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+export type DailyBreakdownRow = {
+  date: string;
+  received_total: number;
+  received_count: number;
+};
+
+export async function listPaymentsReceivedOnDate(date: string) {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase не настроен");
+
+  const end = nextDayIso(date);
+  const { data, error } = await supabase
+    .from("student_payments")
+    .select(
+      "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note, students(full_name, student_code, start_date, payment_due_day)",
+    )
+    .gte("paid_at", `${date}T00:00:00.000Z`)
+    .lt("paid_at", `${end}T00:00:00.000Z`)
+    .gt("amount_paid", 0)
+    .order("paid_at", { ascending: false });
+
+  if (error) throw new Error(error.message);
+  return (data ?? []).map(mapPayment);
+}
+
+export function getMonthDailyBreakdown(
+  payments: StudentPayment[],
+): DailyBreakdownRow[] {
+  const map = new Map<string, { received_total: number; received_count: number }>();
+
+  for (const payment of payments) {
+    if (!payment.paid_at || payment.amount_paid <= 0) continue;
+    const day = payment.paid_at.slice(0, 10);
+    const current = map.get(day) ?? { received_total: 0, received_count: 0 };
+    current.received_total += payment.amount_paid;
+    current.received_count += 1;
+    map.set(day, current);
+  }
+
+  return [...map.entries()]
+    .map(([date, stats]) => ({ date, ...stats }))
+    .sort((a, b) => b.date.localeCompare(a.date));
+}
+
+export async function getDuePaymentsOnDate(date: string) {
+  const periodMonth = periodMonthFromDate(date);
+  const merged = await buildOwnerPaymentsForMonth(periodMonth);
+  return merged.filter((p) => p.due_date === date);
+}
+
+export type DailyReportSection = "received" | "due";
+
+export function summarizeDailyReceived(payments: StudentPayment[]) {
+  return {
+    received_total: payments.reduce((s, p) => s + p.amount_paid, 0),
+    received_count: payments.length,
+  };
+}
+
+export function summarizeDailyDue(payments: StudentPayment[]) {
+  const unpaid = payments.filter(
+    (p) => p.status !== "paid" && p.amount_paid < p.amount_due,
+  );
+  return {
+    due_today_total: payments.reduce((s, p) => s + p.amount_due, 0),
+    due_today_count: payments.length,
+    due_today_unpaid_total: unpaid.reduce(
+      (s, p) => s + Math.max(0, p.amount_due - p.amount_paid),
+      0,
+    ),
+    due_today_unpaid_count: unpaid.length,
+  };
+}
+
 export function currentPeriodMonth(): string {
   return monthStart(new Date());
+}
+
+export function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
 }
 
 export function formatMoney(amount: number): string {
