@@ -19,8 +19,8 @@ export default function AdminPage() {
             Добавить учителя
           </h2>
           <p className="mt-3 text-zinc-600">
-            Создай учителя, получи код TCH-... и пароль. Без учителя учеников
-            добавить нельзя.
+            Создай учителя, получи код TCH-... и пароль. В списке виден код,
+            пароль можно сбросить. Без учителя учеников добавить нельзя.
           </p>
           <p className="mt-6 font-medium text-indigo-600 group-hover:underline">
             Перейти →
@@ -38,7 +38,8 @@ export default function AdminPage() {
             Добавить ученика
           </h2>
           <p className="mt-3 text-zinc-600">
-            Выбери учителя и добавь ученика. Он сразу попадёт к этому учителю.
+            Выбери учителя и добавь ученика. Код STU-... виден в списке,
+            пароль можно сбросить кнопкой «Новый пароль».
           </p>
           <p className="mt-6 font-medium text-emerald-600 group-hover:underline">
             Перейти →
