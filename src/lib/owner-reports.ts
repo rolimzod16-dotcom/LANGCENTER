@@ -1,12 +1,13 @@
 import {
   currentPeriodMonth,
-  listPaymentsForMonth,
+  getOwnerPaymentsForMonth,
   type StudentPayment,
 } from "@/lib/payments";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export type OwnerReport = {
   period_month: string;
+  updated_at: string;
   summary: {
     total_students: number;
     active_students: number;
@@ -17,6 +18,7 @@ export type OwnerReport = {
     paid_count: number;
     debt_count: number;
     overdue_count: number;
+    new_count: number;
   };
   payments: StudentPayment[];
 };
@@ -36,13 +38,7 @@ export async function getOwnerReport(
     .select("id", { count: "exact", head: true })
     .eq("status", "active");
 
-  let payments: StudentPayment[] = [];
-  try {
-    payments = await listPaymentsForMonth(periodMonth);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "";
-    if (!msg.includes("student_payments")) throw err;
-  }
+  const payments = await getOwnerPaymentsForMonth(periodMonth);
 
   const totalIncome = payments.reduce((s, p) => s + p.amount_paid, 0);
   const totalExpected = payments.reduce((s, p) => s + p.amount_due, 0);
@@ -56,9 +52,11 @@ export async function getOwnerReport(
     (p) => p.status !== "paid" && p.amount_paid < p.amount_due,
   ).length;
   const overdueCount = payments.filter((p) => p.status === "overdue").length;
+  const newCount = payments.filter((p) => !p.has_invoice).length;
 
   return {
     period_month: periodMonth,
+    updated_at: new Date().toISOString(),
     summary: {
       total_students: totalStudents ?? 0,
       active_students: activeStudents ?? 0,
@@ -69,6 +67,7 @@ export async function getOwnerReport(
       paid_count: paidCount,
       debt_count: debtCount,
       overdue_count: overdueCount,
+      new_count: newCount,
     },
     payments,
   };

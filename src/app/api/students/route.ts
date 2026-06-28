@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { assignStudentToTeacher, getTeacherForStudent } from "@/lib/groups";
+import { ensureStudentPaymentForMonth } from "@/lib/payments";
 import { createStudent, listStudents } from "@/lib/students";
 
 export async function GET() {
@@ -40,6 +41,12 @@ export async function POST(request: NextRequest) {
     }
 
     const monthlyFee = body.monthly_fee ? Number(body.monthly_fee) : undefined;
+    const startDate = body.start_date
+      ? String(body.start_date).slice(0, 10)
+      : undefined;
+    const paymentDueDay = body.payment_due_day
+      ? Number(body.payment_due_day)
+      : undefined;
 
     const student = await createStudent({
       first_name: firstName,
@@ -47,9 +54,17 @@ export async function POST(request: NextRequest) {
       email: body.email ? String(body.email) : undefined,
       phone: body.phone ? String(body.phone) : undefined,
       monthly_fee: monthlyFee,
+      start_date: startDate,
+      payment_due_day: paymentDueDay,
     });
 
     await assignStudentToTeacher(student.id, teacherId);
+
+    try {
+      await ensureStudentPaymentForMonth(student.id);
+    } catch {
+      // payment table may not exist yet — student still created
+    }
 
     return NextResponse.json({ student }, { status: 201 });
   } catch (error) {

@@ -13,7 +13,19 @@ type Student = {
   student_code: string;
   phone: string | null;
   teacher_name?: string;
+  start_date: string | null;
+  payment_due_day: number | null;
 };
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function formatDateRu(iso: string | null) {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-");
+  return `${d}.${m}.${y}`;
+}
 
 export default function AdminStudentsPage() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -22,6 +34,8 @@ export default function AdminStudentsPage() {
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [monthlyFee, setMonthlyFee] = useState("500000");
+  const [startDate, setStartDate] = useState(todayIso);
+  const [paymentDueDay, setPaymentDueDay] = useState("10");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [credentials, setCredentials] = useState<{
@@ -54,12 +68,16 @@ export default function AdminStudentsPage() {
             student_code: string;
             phone: string | null;
             teacher_name?: string | null;
+            start_date?: string | null;
+            payment_due_day?: number | null;
           }) => ({
             id: s.id,
             full_name: `${s.last_name} ${s.first_name}`.trim(),
             student_code: s.student_code,
             phone: s.phone,
             teacher_name: s.teacher_name ?? undefined,
+            start_date: s.start_date ?? null,
+            payment_due_day: s.payment_due_day ?? null,
           }),
         ),
       );
@@ -90,6 +108,8 @@ export default function AdminStudentsPage() {
           phone: phone || undefined,
           teacher_id: teacherId,
           monthly_fee: Number(monthlyFee) || 500000,
+          start_date: startDate,
+          payment_due_day: Number(paymentDueDay) || 10,
         }),
       });
       const data = await res.json();
@@ -100,6 +120,7 @@ export default function AdminStudentsPage() {
       });
       setFullName("");
       setPhone("");
+      setStartDate(todayIso());
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка");
@@ -193,6 +214,30 @@ export default function AdminStudentsPage() {
               className="lc-input"
             />
           </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="lc-label">Дата начала занятий *</label>
+              <input
+                type="date"
+                value={startDate}
+                onChange={(e) => setStartDate(e.target.value)}
+                required
+                className="lc-input"
+              />
+            </div>
+            <div>
+              <label className="lc-label">День оплаты в месяце (1–28) *</label>
+              <input
+                type="number"
+                min={1}
+                max={28}
+                value={paymentDueDay}
+                onChange={(e) => setPaymentDueDay(e.target.value)}
+                required
+                className="lc-input"
+              />
+            </div>
+          </div>
           <div>
             <label className="lc-label">
               Оплата в месяц (сум) — только для отчёта владельца, ученик не видит
@@ -223,18 +268,24 @@ export default function AdminStudentsPage() {
           Код виден всегда. Пароль зашифрован — только сброс.
         </p>
         <ul className="space-y-2">
-          {students.map((s) => (
-            <AccountListItem
-              key={s.id}
-              name={s.full_name}
-              code={s.student_code}
-              subtitle={
-                s.teacher_name ? `Учитель: ${s.teacher_name}` : s.phone || undefined
-              }
-              onResetPassword={() => handleResetPassword(s.id)}
-              resetting={resettingId === s.id}
-            />
-          ))}
+          {students.map((s) => {
+            const dateInfo = `Старт: ${formatDateRu(s.start_date)} · Оплата: ${s.payment_due_day ?? 10}-е число`;
+            const subtitle = s.teacher_name
+              ? `Учитель: ${s.teacher_name} · ${dateInfo}`
+              : s.phone
+                ? `${s.phone} · ${dateInfo}`
+                : dateInfo;
+            return (
+              <AccountListItem
+                key={s.id}
+                name={s.full_name}
+                code={s.student_code}
+                subtitle={subtitle}
+                onResetPassword={() => handleResetPassword(s.id)}
+                resetting={resettingId === s.id}
+              />
+            );
+          })}
         </ul>
         {students.length === 0 && (
           <p className="lc-card-flat p-4 text-center text-slate-500">

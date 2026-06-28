@@ -17,6 +17,8 @@ export type StudentRow = {
   student_code: string;
   is_active: boolean;
   created_at: string;
+  start_date: string | null;
+  payment_due_day: number | null;
 };
 
 export type CreateStudentResult = StudentRow & {
@@ -31,6 +33,8 @@ type DbStudent = {
   status: string;
   created_at: string;
   password_hash?: string;
+  start_date?: string | null;
+  payment_due_day?: number | null;
 };
 
 function parseFullName(fullName: string): { first_name: string; last_name: string } {
@@ -55,6 +59,8 @@ function mapStudent(row: DbStudent): StudentRow {
     student_code: row.student_code,
     is_active: row.status === "active",
     created_at: row.created_at,
+    start_date: row.start_date ?? null,
+    payment_due_day: row.payment_due_day ?? null,
   };
 }
 
@@ -80,7 +86,9 @@ export async function listStudents(): Promise<StudentRow[]> {
 
   const { data, error } = await supabase
     .from("students")
-    .select("id, full_name, phone, student_code, status, created_at")
+    .select(
+      "id, full_name, phone, student_code, status, created_at, start_date, payment_due_day",
+    )
     .order("created_at", { ascending: false });
 
   if (error) throw new Error(error.message);
@@ -93,6 +101,8 @@ export async function createStudent(input: {
   email?: string;
   phone?: string;
   monthly_fee?: number;
+  start_date?: string;
+  payment_due_day?: number;
 }): Promise<CreateStudentResult> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен. Проверь .env.local");
@@ -112,11 +122,20 @@ export async function createStudent(input: {
   if (input.monthly_fee !== undefined && input.monthly_fee > 0) {
     insertRow.monthly_fee = input.monthly_fee;
   }
+  if (input.start_date) {
+    insertRow.start_date = input.start_date;
+  }
+  if (input.payment_due_day !== undefined) {
+    const day = Math.min(Math.max(Math.round(input.payment_due_day), 1), 28);
+    insertRow.payment_due_day = day;
+  }
 
   const { data, error } = await supabase
     .from("students")
     .insert(insertRow)
-    .select("id, full_name, phone, student_code, status, created_at")
+    .select(
+      "id, full_name, phone, student_code, status, created_at, start_date, payment_due_day",
+    )
     .single();
 
   if (error) {
