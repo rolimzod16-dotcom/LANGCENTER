@@ -18,23 +18,21 @@ type Payment = {
   has_invoice: boolean;
 };
 
-type Report = {
-  period_month: string;
-  updated_at: string;
-  summary: {
-    total_students: number;
-    active_students: number;
-    total_income: number;
-    total_expected: number;
-    total_debt: number;
-    profit: number;
-    paid_count: number;
-    debt_count: number;
-    overdue_count: number;
-    new_count: number;
-  };
-  payments: Payment[];
+type Summary = {
+  total_students: number;
+  active_students: number;
+  total_income: number;
+  total_expected: number;
+  total_debt: number;
+  profit: number;
+  paid_count: number;
+  debt_count: number;
+  overdue_count: number;
+  new_count: number;
+  billing_count: number;
 };
+
+type Filter = "all" | "paid" | "debt" | "overdue" | "new";
 
 const STATUS: Record<string, { label: string; className: string }> = {
   paid: { label: "Оплачено", className: "bg-emerald-100 text-emerald-800" },
@@ -44,7 +42,17 @@ const STATUS: Record<string, { label: string; className: string }> = {
   new: { label: "Новый", className: "bg-blue-100 text-blue-800" },
 };
 
-const POLL_INTERVAL_MS = 20_000;
+const FILTERS: { id: Filter; label: string }[] = [
+  { id: "all", label: "Все" },
+  { id: "debt", label: "Должники" },
+  { id: "overdue", label: "Просрочено" },
+  { id: "paid", label: "Оплачено" },
+  { id: "new", label: "Новые" },
+];
+
+const PAGE_SIZE = 50;
+const POLL_INTERVAL_MS = 30_000;
+const SEARCH_DEBOUNCE_MS = 350;
 
 function monthLabel(ym: string) {
   const [y, m] = ym.split("-");
@@ -73,47 +81,113 @@ export default function OwnerReportsPage() {
   const now = new Date();
   const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   const [month, setMonth] = useState(defaultMonth);
-  const [report, setReport] = useState<Report | null>(null);
+  const [summary, setSummary] = useState<Summary | null>(null);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [pagination, setPagination] = useState({
+    total: 0,
+    page: 1,
+    limit: PAGE_SIZE,
+    total_pages: 1,
+  });
+  const [filter, setFilter] = useState<Filter>("all");
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [page, setPage] = useState(1);
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(true);
+  const [summaryLoading, setSummaryLoading] = useState(true);
+  const [listLoading, setListLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [ensuringId, setEnsuringId] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
 
-  const load = useCallback(
+  const loadSummary = useCallback(
     async (silent = false) => {
-      if (!silent) {
-        setLoading(true);
-        setError("");
-      }
+      if (!silent) setSummaryLoading(true);
       const period = `${month}-01`;
-      const res = await fetch(`/api/owner/reports?month=${period}`);
+      const res = await fetch(`/api/owner/reports?month=${period}&summary_only=1`);
       const data = await res.json();
-      if (!silent) setLoading(false);
+      if (!silent) setSummaryLoading(false);
       if (!res.ok) {
         if (!silent) setError(data.error ?? "Ошибка загрузки");
         return;
       }
-      setReport(data);
+      setSummary(data.summary);
       setLastUpdated(data.updated_at ?? new Date().toISOString());
+      setError("");
     },
     [month],
   );
 
-  useEffect(() => {
-    load();
-  }, [load]);
+  const loadList = useCallback(
+    async (silent = false) => {
+      if (!silent) setListLoading(true);
+      const period = `${month}-01`;
+      const params = new URLSearchParams({
+        month: period,
+        page: String(page),
+        limit: String(PAGE_SIZE),
+        filter,
+      });
+      if (search.trim()) params.set("search", search.trim());
+
+      const res = await fetch(`/api/owner/reports?${params}`);
+      const data = await res.json();
+      if (!silent) setListLoading(false);
+      if (!res.ok) {
+        if (!silent) setError(data.error ?? "Ошибка загрузки списка");
+        return;
+      }
+      setPayments(data.payments ?? []);
+      setPagination(
+        data.pagination ?? {
+          total: 0,
+          page: 1,
+          limit: PAGE_SIZE,
+          total_pages: 1,
+        },
+      );
+      setError("");
+    },
+    [month, page, filter, search],
+  );
+
+  const refreshAll = useCallback(
+    async (silent = false) => {
+      await Promise.all([loadSummary(silent), loadList(silent)]);
+    },
+    [loadSummary, loadList],
+  );
 
   useEffect(() => {
-    const poll = setInterval(() => load(true), POLL_INTERVAL_MS);
+    loadSummary();
+  }, [loadSummary]);
+
+  useEffect(() => {
+    loadList();
+  }, [loadList]);
+
+  useEffect(() => {
+    const poll = setInterval(() => loadSummary(true), POLL_INTERVAL_MS);
     return () => clearInterval(poll);
-  }, [load]);
+  }, [loadSummary]);
 
   useEffect(() => {
     const timer = setInterval(() => setTick((t) => t + 1), 5000);
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filter, month]);
 
   async function generateFees() {
     setGenerating(true);
@@ -129,7 +203,7 @@ export default function OwnerReportsPage() {
       setError(data.error ?? "Ошибка");
       return;
     }
-    load();
+    await refreshAll();
   }
 
   async function markPaid(id: string) {
@@ -139,7 +213,7 @@ export default function OwnerReportsPage() {
       alert(data.error ?? "Ошибка");
       return;
     }
-    load(true);
+    await refreshAll(true);
   }
 
   async function ensureInvoice(studentId: string) {
@@ -155,16 +229,16 @@ export default function OwnerReportsPage() {
       alert(data.error ?? "Ошибка");
       return;
     }
-    load(true);
+    await refreshAll(true);
   }
 
-  const s = report?.summary;
+  const s = summary;
   void tick;
 
   return (
     <AdminSubLayout
       title="Отчёт владельца"
-      description="Учёт наличных оплат в центре — кто заплатил, кто должен, доход и прибыль. Онлайн-оплаты нет. Данные обновляются автоматически."
+      description="Учёт наличных оплат. Сводка обновляется автоматически, список — по 50 учеников за раз."
     >
       <div className="mb-6 flex flex-wrap items-end gap-4">
         <div>
@@ -189,7 +263,7 @@ export default function OwnerReportsPage() {
         </Link>
         {lastUpdated && (
           <p className="text-sm text-slate-500">
-            Обновлено {secondsAgo(lastUpdated)}
+            Сводка: {secondsAgo(lastUpdated)}
           </p>
         )}
       </div>
@@ -205,9 +279,11 @@ export default function OwnerReportsPage() {
         </div>
       )}
 
-      {loading && <p className="text-slate-500">Загрузка отчёта…</p>}
+      {summaryLoading && !s && (
+        <p className="text-slate-500">Загрузка сводки…</p>
+      )}
 
-      {s && !loading && report && (
+      {s && (
         <>
           <p className="mb-4 text-sm font-medium text-violet-700">
             Период: {monthLabel(month)}
@@ -221,13 +297,13 @@ export default function OwnerReportsPage() {
           <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div className="lc-card border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Учеников
+                Учеников в отчёте
               </p>
               <p className="mt-2 text-3xl font-bold text-slate-900">
-                {s.active_students}
+                {s.billing_count}
               </p>
               <p className="mt-1 text-xs text-slate-500">
-                всего в базе: {s.total_students}
+                активных в базе: {s.active_students} · всего: {s.total_students}
               </p>
             </div>
 
@@ -270,21 +346,51 @@ export default function OwnerReportsPage() {
 
           <div className="lc-card overflow-hidden">
             <div className="border-b border-slate-100 px-5 py-4">
-              <h2 className="font-bold text-slate-900">
-                Оплаты учеников ({report.payments.length})
-              </h2>
-              <p className="mt-1 text-sm text-slate-500">
-                Зелёный — оплатил · Красный — должен · Синий — новый, счёт ещё не выставлен
-              </p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h2 className="font-bold text-slate-900">
+                    Оплаты учеников ({pagination.total})
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Показано {payments.length} из {pagination.total} · по {PAGE_SIZE} на страницу
+                  </p>
+                </div>
+                <input
+                  type="search"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="Поиск по имени или коду…"
+                  className="lc-input w-full max-w-xs"
+                />
+              </div>
+
+              <div className="mt-4 flex flex-wrap gap-2">
+                {FILTERS.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    onClick={() => setFilter(f.id)}
+                    className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                      filter === f.id
+                        ? "bg-indigo-600 text-white"
+                        : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                    }`}
+                  >
+                    {f.label}
+                  </button>
+                ))}
+              </div>
             </div>
 
-            {report.payments.length === 0 ? (
+            {listLoading && payments.length === 0 ? (
+              <p className="p-6 text-center text-slate-500">Загрузка списка…</p>
+            ) : payments.length === 0 ? (
               <p className="p-6 text-center text-slate-500">
-                Нет учеников за этот месяц. Добавьте учеников или выберите другой месяц.
+                Ничего не найдено. Измените фильтр или поиск.
               </p>
             ) : (
-              <ul className="divide-y divide-slate-100">
-                {report.payments.map((p) => {
+              <ul className={`divide-y divide-slate-100 ${listLoading ? "opacity-60" : ""}`}>
+                {payments.map((p) => {
                   const statusKey = !p.has_invoice ? "new" : p.status;
                   const st = STATUS[statusKey] ?? STATUS.pending;
                   const debt = Math.max(0, p.amount_due - p.amount_paid);
@@ -301,7 +407,7 @@ export default function OwnerReportsPage() {
                           {p.student_code}
                         </p>
                         <p className="mt-1 text-sm text-slate-500">
-                          Старт: {formatDateRu(p.start_date)} · Срок оплаты:{" "}
+                          Старт: {formatDateRu(p.start_date)} · Срок:{" "}
                           {formatDateRu(p.due_date)} · {formatMoney(p.amount_due)}
                           {p.amount_paid > 0 && (
                             <span className="text-emerald-600">
@@ -349,6 +455,36 @@ export default function OwnerReportsPage() {
                   );
                 })}
               </ul>
+            )}
+
+            {pagination.total_pages > 1 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-4">
+                <p className="text-sm text-slate-500">
+                  Страница {pagination.page} из {pagination.total_pages}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={pagination.page <= 1 || listLoading}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    className="lc-btn px-3 py-1.5 text-sm disabled:opacity-50"
+                  >
+                    ← Назад
+                  </button>
+                  <button
+                    type="button"
+                    disabled={
+                      pagination.page >= pagination.total_pages || listLoading
+                    }
+                    onClick={() =>
+                      setPage((p) => Math.min(pagination.total_pages, p + 1))
+                    }
+                    className="lc-btn px-3 py-1.5 text-sm disabled:opacity-50"
+                  >
+                    Вперёд →
+                  </button>
+                </div>
+              </div>
             )}
           </div>
         </>

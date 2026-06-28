@@ -95,7 +95,39 @@ function mapPayment(row: {
   };
 }
 
-export async function getOwnerPaymentsForMonth(periodMonth: string) {
+export type PaymentListFilter = "all" | "paid" | "debt" | "overdue" | "new";
+
+export type OwnerPaymentsQuery = {
+  periodMonth: string;
+  page?: number;
+  limit?: number;
+  search?: string;
+  filter?: PaymentListFilter;
+};
+
+export type OwnerPaymentsSummary = {
+  total_income: number;
+  total_expected: number;
+  total_debt: number;
+  profit: number;
+  paid_count: number;
+  debt_count: number;
+  overdue_count: number;
+  new_count: number;
+  billing_count: number;
+};
+
+export type PaginatedOwnerPayments = {
+  items: StudentPayment[];
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+};
+
+async function buildOwnerPaymentsForMonth(
+  periodMonth: string,
+): Promise<StudentPayment[]> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");
 
@@ -154,6 +186,97 @@ export async function getOwnerPaymentsForMonth(periodMonth: string) {
   return merged.sort((a, b) => a.due_date.localeCompare(b.due_date));
 }
 
+function matchesPaymentFilter(
+  payment: StudentPayment,
+  filter: PaymentListFilter,
+): boolean {
+  if (filter === "all") return true;
+  if (filter === "new") return !payment.has_invoice;
+  if (filter === "paid") return payment.status === "paid";
+  if (filter === "overdue") return payment.status === "overdue";
+  if (filter === "debt") {
+    return payment.status !== "paid" && payment.amount_paid < payment.amount_due;
+  }
+  return true;
+}
+
+function matchesPaymentSearch(payment: StudentPayment, search: string): boolean {
+  const q = search.trim().toLowerCase();
+  if (!q) return true;
+  return (
+    payment.student_name.toLowerCase().includes(q) ||
+    payment.student_code.toLowerCase().includes(q)
+  );
+}
+
+export function summarizeOwnerPayments(
+  payments: StudentPayment[],
+): OwnerPaymentsSummary {
+  const totalIncome = payments.reduce((s, p) => s + p.amount_paid, 0);
+  const totalExpected = payments.reduce((s, p) => s + p.amount_due, 0);
+  const totalDebt = payments.reduce(
+    (s, p) => s + Math.max(0, p.amount_due - p.amount_paid),
+    0,
+  );
+
+  return {
+    total_income: totalIncome,
+    total_expected: totalExpected,
+    total_debt: totalDebt,
+    profit: totalIncome,
+    paid_count: payments.filter((p) => p.status === "paid").length,
+    debt_count: payments.filter(
+      (p) => p.status !== "paid" && p.amount_paid < p.amount_due,
+    ).length,
+    overdue_count: payments.filter((p) => p.status === "overdue").length,
+    new_count: payments.filter((p) => !p.has_invoice).length,
+    billing_count: payments.length,
+  };
+}
+
+export async function getOwnerPaymentsForMonth(periodMonth: string) {
+  return buildOwnerPaymentsForMonth(periodMonth);
+}
+
+export async function getOwnerPaymentsSummary(periodMonth: string) {
+  const payments = await buildOwnerPaymentsForMonth(periodMonth);
+  return summarizeOwnerPayments(payments);
+}
+
+export function paginateOwnerPayments(
+  payments: StudentPayment[],
+  query: Omit<OwnerPaymentsQuery, "periodMonth">,
+): PaginatedOwnerPayments {
+  const page = Math.max(1, query.page ?? 1);
+  const limit = Math.min(Math.max(query.limit ?? 50, 1), 100);
+  const filter = query.filter ?? "all";
+  const search = query.search ?? "";
+
+  const filtered = payments.filter(
+    (p) => matchesPaymentFilter(p, filter) && matchesPaymentSearch(p, search),
+  );
+
+  const total = filtered.length;
+  const totalPages = Math.max(1, Math.ceil(total / limit));
+  const safePage = Math.min(page, totalPages);
+  const start = (safePage - 1) * limit;
+
+  return {
+    items: filtered.slice(start, start + limit),
+    total,
+    page: safePage,
+    limit,
+    total_pages: totalPages,
+  };
+}
+
+export async function getOwnerPaymentsPage(
+  query: OwnerPaymentsQuery,
+): Promise<PaginatedOwnerPayments> {
+  const merged = await buildOwnerPaymentsForMonth(query.periodMonth);
+  return paginateOwnerPayments(merged, query);
+}
+
 export async function listPaymentsForMonth(periodMonth: string) {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");
@@ -181,27 +304,33 @@ export async function generateMonthlyPayments(periodMonth: string) {
 
   if (studentsError) throw new Error(studentsError.message);
 
-  let created = 0;
-  for (const student of students ?? []) {
-    if (!studentStartedInPeriod(student.start_date, periodMonth)) continue;
-    const fee = Number(student.monthly_fee ?? 500000);
-    const dueDay = Number(student.payment_due_day ?? 10);
-    const dueDate = dueDateFromPeriod(periodMonth, dueDay);
-    const { error } = await supabase.from("student_payments").upsert(
-      {
+  const rows = (students ?? [])
+    .filter((student) => studentStartedInPeriod(student.start_date, periodMonth))
+    .map((student) => {
+      const fee = Number(student.monthly_fee ?? 500000);
+      const dueDay = Number(student.payment_due_day ?? 10);
+      return {
         student_id: student.id,
         amount_due: fee,
         amount_paid: 0,
-        due_date: dueDate,
-        status: "pending",
+        due_date: dueDateFromPeriod(periodMonth, dueDay),
+        status: "pending" as const,
         period_month: periodMonth,
-      },
-      { onConflict: "student_id,period_month", ignoreDuplicates: true },
-    );
-    if (!error) created++;
+      };
+    });
+
+  let created = 0;
+  const batchSize = 100;
+  for (let i = 0; i < rows.length; i += batchSize) {
+    const batch = rows.slice(i, i + batchSize);
+    const { error } = await supabase.from("student_payments").upsert(batch, {
+      onConflict: "student_id,period_month",
+      ignoreDuplicates: true,
+    });
+    if (!error) created += batch.length;
   }
 
-  return { created, total: students?.length ?? 0 };
+  return { created, total: rows.length };
 }
 
 export async function ensureStudentPaymentForMonth(

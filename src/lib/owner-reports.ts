@@ -1,11 +1,16 @@
 import {
   currentPeriodMonth,
   getOwnerPaymentsForMonth,
+  paginateOwnerPayments,
+  summarizeOwnerPayments,
+  type OwnerPaymentsQuery,
+  type PaginatedOwnerPayments,
+  type PaymentListFilter,
   type StudentPayment,
 } from "@/lib/payments";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
-export type OwnerReport = {
+export type OwnerReportSummary = {
   period_month: string;
   updated_at: string;
   summary: {
@@ -19,13 +24,21 @@ export type OwnerReport = {
     debt_count: number;
     overdue_count: number;
     new_count: number;
+    billing_count: number;
   };
-  payments: StudentPayment[];
 };
 
-export async function getOwnerReport(
-  periodMonth = currentPeriodMonth(),
-): Promise<OwnerReport> {
+export type OwnerReportList = OwnerReportSummary & {
+  payments: StudentPayment[];
+  pagination: {
+    total: number;
+    page: number;
+    limit: number;
+    total_pages: number;
+  };
+};
+
+async function studentCounts() {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");
 
@@ -38,37 +51,61 @@ export async function getOwnerReport(
     .select("id", { count: "exact", head: true })
     .eq("status", "active");
 
-  const payments = await getOwnerPaymentsForMonth(periodMonth);
+  return {
+    total_students: totalStudents ?? 0,
+    active_students: activeStudents ?? 0,
+  };
+}
 
-  const totalIncome = payments.reduce((s, p) => s + p.amount_paid, 0);
-  const totalExpected = payments.reduce((s, p) => s + p.amount_due, 0);
-  const totalDebt = payments.reduce(
-    (s, p) => s + Math.max(0, p.amount_due - p.amount_paid),
-    0,
-  );
-
-  const paidCount = payments.filter((p) => p.status === "paid").length;
-  const debtCount = payments.filter(
-    (p) => p.status !== "paid" && p.amount_paid < p.amount_due,
-  ).length;
-  const overdueCount = payments.filter((p) => p.status === "overdue").length;
-  const newCount = payments.filter((p) => !p.has_invoice).length;
+export async function getOwnerReportSummary(
+  periodMonth = currentPeriodMonth(),
+): Promise<OwnerReportSummary> {
+  const [counts, payments] = await Promise.all([
+    studentCounts(),
+    getOwnerPaymentsForMonth(periodMonth),
+  ]);
 
   return {
     period_month: periodMonth,
     updated_at: new Date().toISOString(),
     summary: {
-      total_students: totalStudents ?? 0,
-      active_students: activeStudents ?? 0,
-      total_income: totalIncome,
-      total_expected: totalExpected,
-      total_debt: totalDebt,
-      profit: totalIncome,
-      paid_count: paidCount,
-      debt_count: debtCount,
-      overdue_count: overdueCount,
-      new_count: newCount,
+      ...counts,
+      ...summarizeOwnerPayments(payments),
     },
-    payments,
   };
 }
+
+export async function getOwnerReportList(
+  periodMonth = currentPeriodMonth(),
+  options: Omit<OwnerPaymentsQuery, "periodMonth"> = {},
+): Promise<OwnerReportList> {
+  const [counts, payments] = await Promise.all([
+    studentCounts(),
+    getOwnerPaymentsForMonth(periodMonth),
+  ]);
+  const paymentSummary = summarizeOwnerPayments(payments);
+  const page = paginateOwnerPayments(payments, options);
+
+  return {
+    period_month: periodMonth,
+    updated_at: new Date().toISOString(),
+    summary: {
+      ...counts,
+      ...paymentSummary,
+    },
+    payments: page.items,
+    pagination: {
+      total: page.total,
+      page: page.page,
+      limit: page.limit,
+      total_pages: page.total_pages,
+    },
+  };
+}
+
+/** @deprecated Use getOwnerReportSummary or getOwnerReportList */
+export async function getOwnerReport(periodMonth = currentPeriodMonth()) {
+  return getOwnerReportList(periodMonth, { page: 1, limit: 100 });
+}
+
+export type { PaymentListFilter, PaginatedOwnerPayments };
