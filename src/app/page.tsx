@@ -14,7 +14,7 @@ const sections = [
   {
     href: "/admin",
     title: "Админ-панель",
-    desc: "Добавление учителей и учеников, коды и пароли",
+    desc: "Только для владельца центра — нужен пароль администратора",
     icon: "⚙️",
     accent: "border-violet-200 bg-gradient-to-br from-violet-50 to-white",
   },

@@ -1,7 +1,18 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/AppShell";
 
 export default function AdminPage() {
+  const router = useRouter();
+
+  async function logout() {
+    await fetch("/api/admin/logout", { method: "POST" });
+    router.push("/admin/login");
+    router.refresh();
+  }
+
   return (
     <AppShell
       title="Панель администратора"
@@ -45,6 +56,16 @@ export default function AdminPage() {
             Перейти →
           </p>
         </Link>
+      </div>
+
+      <div className="mb-6 flex justify-end">
+        <button
+          type="button"
+          onClick={logout}
+          className="lc-btn lc-btn-ghost px-4 py-2 text-sm"
+        >
+          Выйти из админки
+        </button>
       </div>
 
       <div className="lc-card-flat mt-8 p-6 text-sm text-slate-600">

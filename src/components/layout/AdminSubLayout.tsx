@@ -1,4 +1,7 @@
+"use client";
+
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
 
 type Props = {
@@ -8,6 +11,14 @@ type Props = {
 };
 
 export function AdminSubLayout({ title, description, children }: Props) {
+  const router = useRouter();
+
+  async function logout() {
+    await fetch("/api/admin/logout", { method: "POST" });
+    router.push("/admin/login");
+    router.refresh();
+  }
+
   return (
     <div className="lc-page min-h-screen">
       <header className="sticky top-0 z-10 border-b border-slate-200/80 bg-white/90 backdrop-blur-md">
@@ -16,12 +27,21 @@ export function AdminSubLayout({ title, description, children }: Props) {
             <Logo size="sm" />
             <h1 className="text-lg font-bold text-slate-900">{title}</h1>
           </div>
-          <Link
-            href="/admin"
-            className="text-sm font-medium text-indigo-600 hover:underline"
-          >
-            ← Админ
-          </Link>
+          <div className="flex items-center gap-3">
+            <Link
+              href="/admin"
+              className="text-sm font-medium text-indigo-600 hover:underline"
+            >
+              ← Админ
+            </Link>
+            <button
+              type="button"
+              onClick={logout}
+              className="text-sm text-slate-500 hover:text-slate-800"
+            >
+              Выйти
+            </button>
+          </div>
         </div>
       </header>
 

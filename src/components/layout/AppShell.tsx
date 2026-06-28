@@ -8,7 +8,6 @@ type AppShellProps = {
 };
 
 const nav = [
-  { href: "/admin", label: "Админ" },
   { href: "/teacher/login", label: "Учитель" },
   { href: "/student/login", label: "Ученик" },
   { href: "/app", label: "Приложение" },

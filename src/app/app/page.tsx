@@ -76,10 +76,7 @@ export default function MobileAppPage() {
         </div>
 
         <p className="mt-auto pt-10 text-center text-xs text-slate-400">
-          Админ-панель:{" "}
-          <Link href="/admin" className="font-medium text-indigo-600">
-            langcenter.vercel.app/admin
-          </Link>
+          Админ-панель доступна только с компьютера
         </p>
       </main>
     </div>
