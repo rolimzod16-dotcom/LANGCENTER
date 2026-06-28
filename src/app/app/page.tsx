@@ -1,57 +1,59 @@
 import Link from "next/link";
 import { ApkDownloadButton } from "@/components/mobile/ApkDownloadButton";
 import { InstallBanner } from "@/components/mobile/InstallBanner";
+import { Logo } from "@/components/ui/Logo";
 
 export default function MobileAppPage() {
   return (
-    <div className="flex min-h-dvh flex-col bg-gradient-to-b from-indigo-50 to-zinc-50">
-      <main className="safe-top safe-bottom mx-auto flex w-full max-w-lg flex-1 flex-col px-4 py-8">
-        <div className="mb-8 text-center">
-          <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-3xl bg-indigo-600 text-3xl font-bold text-white shadow-lg">
-            LC
-          </div>
-          <h1 className="text-2xl font-bold text-zinc-900">Lang Center</h1>
-          <p className="mt-2 text-zinc-600">
+    <div className="lc-page safe-top safe-bottom flex min-h-dvh flex-col">
+      <main className="mx-auto flex w-full max-w-lg flex-1 flex-col px-4 py-8">
+        <div className="text-center">
+          <Logo size="lg" className="mx-auto" />
+          <h1 className="mt-5 text-2xl font-bold text-slate-900">Lang Center</h1>
+          <p className="mt-2 text-slate-500">
             Кабинет учителя и ученика на телефоне
           </p>
         </div>
 
-        <ApkDownloadButton />
+        <div className="mt-8 space-y-3">
+          <ApkDownloadButton />
+          <Link
+            href="/download"
+            className="block text-center text-sm font-medium text-indigo-600 hover:underline"
+          >
+            Инструкция по установке →
+          </Link>
+        </div>
 
-        <Link
-          href="/download"
-          className="mb-4 block text-center text-sm text-indigo-600 underline"
-        >
-          Подробная инструкция по установке →
-        </Link>
-
-        <div className="my-4 rounded-2xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
-          <p className="font-medium text-zinc-900">Как установить APK</p>
-          <ol className="mt-2 list-decimal space-y-1 pl-5">
-            <li>Нажмите «Скачать для Android»</li>
-            <li>Откройте скачанный файл</li>
-            <li>Разрешите установку, если телефон спросит</li>
-            <li>Готово — откройте Lang Center</li>
+        <div className="lc-card-flat mt-6 p-4 text-sm text-slate-600">
+          <p className="font-semibold text-slate-800">Быстрая установка</p>
+          <ol className="mt-2 list-decimal space-y-1.5 pl-5 leading-relaxed">
+            <li>Скачайте APK</li>
+            <li>Откройте файл в «Загрузках»</li>
+            <li>Разрешите установку</li>
+            <li>Войдите с кодом от центра</li>
           </ol>
         </div>
 
-        <InstallBanner />
+        <div className="mt-4">
+          <InstallBanner />
+        </div>
 
-        <p className="mb-3 text-center text-xs font-medium uppercase tracking-wide text-zinc-400">
-          или войти в браузере
+        <p className="mt-8 text-center text-xs font-semibold uppercase tracking-widest text-slate-400">
+          Войти в браузере
         </p>
 
-        <div className="space-y-3">
+        <div className="mt-4 space-y-3">
           <Link
             href="/teacher/login"
-            className="flex items-center gap-4 rounded-2xl border border-indigo-200 bg-white p-5 shadow-sm transition active:scale-[0.98]"
+            className="lc-link-card flex items-center gap-4 p-5"
           >
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-100 text-2xl">
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-100 text-2xl">
               👨‍🏫
             </span>
             <div>
-              <p className="font-semibold text-zinc-900">Я учитель</p>
-              <p className="text-sm text-zinc-500">
+              <p className="font-bold text-slate-900">Я учитель</p>
+              <p className="text-sm text-slate-500">
                 Ученики, посещаемость, оценки
               </p>
             </div>
@@ -59,24 +61,24 @@ export default function MobileAppPage() {
 
           <Link
             href="/student/login"
-            className="flex items-center gap-4 rounded-2xl border border-emerald-200 bg-white p-5 shadow-sm transition active:scale-[0.98]"
+            className="lc-link-card flex items-center gap-4 border-emerald-100 p-5"
           >
-            <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-100 text-2xl">
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-100 text-2xl">
               🎓
             </span>
             <div>
-              <p className="font-semibold text-zinc-900">Я ученик</p>
-              <p className="text-sm text-zinc-500">
+              <p className="font-bold text-slate-900">Я ученик</p>
+              <p className="text-sm text-slate-500">
                 Оценки, посещаемость, учителя
               </p>
             </div>
           </Link>
         </div>
 
-        <p className="mt-auto pt-8 text-center text-xs text-zinc-400">
-          Админ-панель — только с компьютера:{" "}
-          <Link href="/admin" className="text-indigo-600 underline">
-            /admin
+        <p className="mt-auto pt-10 text-center text-xs text-slate-400">
+          Админ-панель:{" "}
+          <Link href="/admin" className="font-medium text-indigo-600">
+            langcenter.vercel.app/admin
           </Link>
         </p>
       </main>

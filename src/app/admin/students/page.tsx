@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CredentialsCard } from "@/components/admin/CredentialsCard";
 import { AccountListItem } from "@/components/admin/AccountListItem";
+import { AdminSubLayout } from "@/components/layout/AdminSubLayout";
 
 type Teacher = { id: string; full_name: string; teacher_code: string };
 type Student = {
@@ -127,26 +128,19 @@ export default function AdminStudentsPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="border-b border-gray-200 bg-white px-4 py-4">
-        <div className="mx-auto flex max-w-3xl items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-900">Ученики</h1>
-          <Link href="/admin" className="text-sm text-blue-600 hover:underline">
-            ← Админ
-          </Link>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-3xl px-4 py-8">
-        <p className="mb-6 text-gray-600">
+    <AdminSubLayout
+      title="Ученики"
+      description={
+        <>
           Шаг 2: выберите учителя и добавьте ученика. Код и пароль — для{" "}
-          <Link href="/student/login" className="text-blue-600 underline">
-            /student/login
+          <Link href="/student/login" className="font-medium text-emerald-600 underline">
+            кабинета ученика
           </Link>
-        </p>
-
+        </>
+      }
+    >
         {teachers.length === 0 && (
-          <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-800">
+          <div className="lc-alert mb-6 border-amber-200 bg-amber-50 text-amber-900">
             Сначала добавьте учителя на{" "}
             <Link href="/admin/teachers" className="underline">
               /admin/teachers
@@ -163,19 +157,14 @@ export default function AdminStudentsPage() {
           />
         )}
 
-        <form
-          onSubmit={handleSubmit}
-          className="mb-8 space-y-4 rounded-xl border border-gray-200 bg-white p-6 shadow-sm"
-        >
+        <form onSubmit={handleSubmit} className="lc-card mb-8 space-y-4 p-6">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Учитель *
-            </label>
+            <label className="lc-label">Учитель *</label>
             <select
               value={teacherId}
               onChange={(e) => setTeacherId(e.target.value)}
               required
-              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+              className="lc-input"
             >
               <option value="">— выберите —</option>
               {teachers.map((t) => (
@@ -186,41 +175,37 @@ export default function AdminStudentsPage() {
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              ФИО ученика *
-            </label>
+            <label className="lc-label">ФИО ученика *</label>
             <input
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               required
-              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+              className="lc-input"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Телефон
-            </label>
+            <label className="lc-label">Телефон</label>
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+              className="lc-input"
             />
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="lc-alert lc-alert-error">{error}</p>}
           <button
             type="submit"
             disabled={loading || teachers.length === 0}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+            className="lc-btn lc-btn-student px-5 py-2.5 disabled:opacity-50"
           >
             {loading ? "Создание…" : "Добавить ученика"}
           </button>
         </form>
 
-        <h2 className="mb-3 font-semibold text-gray-900">
+        <h2 className="mb-2 text-lg font-bold text-slate-900">
           Список ({students.length})
         </h2>
-        <p className="mb-3 text-sm text-gray-500">
-          Код виден всегда. Пароль хранится в зашифрованном виде — посмотреть нельзя, только сбросить.
+        <p className="mb-4 text-sm text-slate-500">
+          Код виден всегда. Пароль зашифрован — только сброс.
         </p>
         <ul className="space-y-2">
           {students.map((s) => (
@@ -237,9 +222,10 @@ export default function AdminStudentsPage() {
           ))}
         </ul>
         {students.length === 0 && (
-          <p className="text-gray-500">Пока нет учеников</p>
+          <p className="lc-card-flat p-4 text-center text-slate-500">
+            Пока нет учеников
+          </p>
         )}
-      </main>
-    </div>
+    </AdminSubLayout>
   );
 }

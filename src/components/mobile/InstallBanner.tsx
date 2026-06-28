@@ -33,11 +33,10 @@ export function InstallBanner() {
 
   if (deferredPrompt) {
     return (
-      <div className="mb-4 rounded-2xl border border-indigo-200 bg-indigo-50 p-4">
-        <p className="font-medium text-indigo-900">Установить приложение</p>
+      <div className="lc-card mb-4 border-indigo-200 bg-gradient-to-br from-indigo-50 to-white p-4">
+        <p className="font-bold text-indigo-900">Установить приложение</p>
         <p className="mt-1 text-sm text-indigo-700">
-          Добавьте Lang Center на главный экран — будет открываться как обычное
-          приложение.
+          Добавьте на главный экран — будет открываться как обычное приложение.
         </p>
         <div className="mt-3 flex gap-2">
           <button
@@ -46,14 +45,14 @@ export function InstallBanner() {
               await deferredPrompt.prompt();
               setDeferredPrompt(null);
             }}
-            className="rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white"
+            className="lc-btn lc-btn-primary px-4 py-2 text-sm"
           >
             Установить
           </button>
           <button
             type="button"
             onClick={() => setDismissed(true)}
-            className="rounded-xl px-4 py-2 text-sm text-indigo-700"
+            className="lc-btn px-4 py-2 text-sm text-indigo-700"
           >
             Позже
           </button>
@@ -63,20 +62,20 @@ export function InstallBanner() {
   }
 
   return (
-    <div className="mb-4 rounded-2xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
-      <p className="font-medium text-zinc-900">Как установить на телефон</p>
-      <ul className="mt-2 list-disc space-y-1 pl-5">
+    <div className="lc-card-flat mb-4 p-4 text-sm text-slate-600">
+      <p className="font-bold text-slate-900">Установка через браузер</p>
+      <ul className="mt-2 list-disc space-y-1 pl-5 leading-relaxed">
         <li>
           <strong>iPhone:</strong> Safari → Поделиться → «На экран Домой»
         </li>
         <li>
-          <strong>Android:</strong> Chrome → меню ⋮ → «Установить приложение»
+          <strong>Android:</strong> Chrome → ⋮ → «Установить приложение»
         </li>
       </ul>
       <button
         type="button"
         onClick={() => setDismissed(true)}
-        className="mt-3 text-indigo-600"
+        className="mt-3 font-medium text-indigo-600"
       >
         Понятно
       </button>

@@ -107,27 +107,19 @@ export default function TeacherDashboardPage() {
       activeTab={tab}
       onTabChange={setTab}
     >
-      {error && (
-        <p className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
-        </p>
-      )}
-      {success && (
-        <p className="mb-4 rounded-xl bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
-          {success}
-        </p>
-      )}
+      {error && <p className="lc-alert lc-alert-error mb-4">{error}</p>}
+      {success && <p className="lc-alert lc-alert-success mb-4">{success}</p>}
 
       {tab === "students" && (
         <section>
-          <h2 className="font-semibold text-zinc-900">
+          <h2 className="text-lg font-bold text-slate-900">
             Мои ученики ({students.length})
           </h2>
-          <p className="mt-1 text-sm text-zinc-500">
+          <p className="mt-1 text-sm text-slate-500">
             Нажмите кнопку — отметка за сегодня
           </p>
           {students.length === 0 ? (
-            <p className="mt-6 rounded-xl bg-zinc-100 p-4 text-sm text-zinc-500">
+            <p className="lc-card-flat mt-6 p-4 text-center text-sm text-slate-500">
               Пока нет учеников. Админ добавит их в панели управления.
             </p>
           ) : (
@@ -135,9 +127,9 @@ export default function TeacherDashboardPage() {
               {students.map((s) => (
                 <li
                   key={s.id}
-                  className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm"
+                  className="lc-card p-4"
                 >
-                  <p className="font-semibold text-zinc-900">{s.full_name}</p>
+                  <p className="font-bold text-slate-900">{s.full_name}</p>
                   <p className="font-mono text-sm text-indigo-600">
                     {s.student_code}
                   </p>
@@ -145,21 +137,21 @@ export default function TeacherDashboardPage() {
                     <button
                       type="button"
                       onClick={() => mark(s.id, "present")}
-                      className="rounded-xl bg-emerald-100 py-3 text-sm font-medium text-emerald-800 active:scale-95"
+                      className="lc-btn rounded-xl bg-emerald-100 py-3 text-sm font-semibold text-emerald-800"
                     >
                       ✅ Пришёл
                     </button>
                     <button
                       type="button"
                       onClick={() => mark(s.id, "late")}
-                      className="rounded-xl bg-amber-100 py-3 text-sm font-medium text-amber-800 active:scale-95"
+                      className="lc-btn rounded-xl bg-amber-100 py-3 text-sm font-semibold text-amber-800"
                     >
                       ⏰ Опоздал
                     </button>
                     <button
                       type="button"
                       onClick={() => mark(s.id, "absent")}
-                      className="rounded-xl bg-red-100 py-3 text-sm font-medium text-red-800 active:scale-95"
+                      className="lc-btn rounded-xl bg-red-100 py-3 text-sm font-semibold text-red-800"
                     >
                       ❌ Нет
                     </button>
@@ -173,15 +165,15 @@ export default function TeacherDashboardPage() {
 
       {tab === "grades" && (
         <section>
-          <h2 className="font-semibold text-zinc-900">Выставить балл</h2>
-          <form onSubmit={submitGrade} className="mt-4 space-y-3">
+          <h2 className="text-lg font-bold text-slate-900">Выставить балл</h2>
+          <form onSubmit={submitGrade} className="lc-card mt-4 space-y-3 p-4">
             <select
               required
               value={gradeForm.student_id}
               onChange={(e) =>
                 setGradeForm((f) => ({ ...f, student_id: e.target.value }))
               }
-              className="w-full rounded-xl border border-zinc-300 px-4 py-3"
+              className="lc-input"
             >
               <option value="">Выберите ученика</option>
               {students.map((s) => (
@@ -196,7 +188,7 @@ export default function TeacherDashboardPage() {
                 setGradeForm((f) => ({ ...f, title: e.target.value }))
               }
               placeholder="Название (Урок, ДЗ, Тест)"
-              className="w-full rounded-xl border border-zinc-300 px-4 py-3"
+              className="lc-input"
             />
             <input
               required
@@ -209,7 +201,7 @@ export default function TeacherDashboardPage() {
                 setGradeForm((f) => ({ ...f, score: e.target.value }))
               }
               placeholder="Балл (0–100)"
-              className="w-full rounded-xl border border-zinc-300 px-4 py-3"
+              className="lc-input"
             />
             <input
               value={gradeForm.comment}
@@ -217,11 +209,11 @@ export default function TeacherDashboardPage() {
                 setGradeForm((f) => ({ ...f, comment: e.target.value }))
               }
               placeholder="Комментарий (необязательно)"
-              className="w-full rounded-xl border border-zinc-300 px-4 py-3"
+              className="lc-input"
             />
             <button
               type="submit"
-              className="w-full rounded-xl bg-indigo-600 py-3.5 font-semibold text-white"
+              className="lc-btn lc-btn-primary w-full py-3.5"
             >
               Сохранить оценку
             </button>
@@ -231,18 +223,22 @@ export default function TeacherDashboardPage() {
 
       {tab === "profile" && (
         <section className="space-y-4">
-          <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-zinc-500">Имя</p>
-            <p className="text-lg font-semibold">{teacher?.full_name ?? "—"}</p>
-            <p className="mt-3 text-sm text-zinc-500">Код</p>
-            <p className="font-mono text-indigo-600">
+          <div className="lc-card p-5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Имя
+            </p>
+            <p className="mt-1 text-lg font-bold">{teacher?.full_name ?? "—"}</p>
+            <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Код
+            </p>
+            <p className="mt-1 font-mono text-indigo-600">
               {teacher?.teacher_code ?? "—"}
             </p>
           </div>
           <button
             type="button"
             onClick={logout}
-            className="w-full rounded-xl border border-zinc-300 py-3.5 font-medium text-zinc-700"
+            className="lc-btn lc-btn-ghost w-full py-3.5"
           >
             Выйти
           </button>

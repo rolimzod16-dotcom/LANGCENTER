@@ -9,7 +9,7 @@ export function ApkDownloadButton({ variant = "primary" }: Props) {
     return (
       <a
         href={APK_DOWNLOAD_PATH}
-        className="inline-flex items-center gap-2 rounded-xl border border-green-300 bg-green-50 px-4 py-2 text-sm font-medium text-green-800"
+        className="lc-btn inline-flex gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-5 py-2.5 text-sm font-semibold text-emerald-800 shadow-sm"
       >
         <span>📥</span>
         Скачать APK ({APK_SIZE_MB} МБ)
@@ -20,15 +20,15 @@ export function ApkDownloadButton({ variant = "primary" }: Props) {
   return (
     <a
       href={APK_DOWNLOAD_PATH}
-      className="flex items-center gap-4 rounded-2xl border-2 border-green-400 bg-green-50 p-5 shadow-sm transition active:scale-[0.98]"
+      className="lc-link-card flex items-center gap-4 border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-5"
     >
-      <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-green-500 text-2xl text-white">
+      <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-emerald-400 to-emerald-600 text-2xl text-white shadow-md shadow-emerald-200">
         📥
       </span>
       <div>
-        <p className="font-semibold text-green-900">Скачать для Android</p>
-        <p className="text-sm text-green-700">
-          APK {APK_SIZE_MB} МБ — установите на телефон
+        <p className="font-bold text-emerald-900">Скачать для Android</p>
+        <p className="text-sm text-emerald-700">
+          APK {APK_SIZE_MB} МБ — бесплатно
         </p>
       </div>
     </a>

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CredentialsCard } from "@/components/admin/CredentialsCard";
 import { AccountListItem } from "@/components/admin/AccountListItem";
+import { AdminSubLayout } from "@/components/layout/AdminSubLayout";
 
 type Teacher = {
   id: string;
@@ -94,23 +95,17 @@ export default function AdminTeachersPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="border-b border-gray-200 bg-white px-4 py-4">
-        <div className="mx-auto flex max-w-3xl items-center justify-between">
-          <h1 className="text-xl font-bold text-gray-900">Учителя</h1>
-          <Link href="/admin" className="text-sm text-blue-600 hover:underline">
-            ← Админ
+    <AdminSubLayout
+      title="Учителя"
+      description={
+        <>
+          Шаг 1: добавьте учителя. Код и пароль — для входа в{" "}
+          <Link href="/teacher/login" className="font-medium text-indigo-600 underline">
+            кабинет учителя
           </Link>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-3xl px-4 py-8">
-        <p className="mb-6 text-gray-600">
-          Шаг 1: добавьте учителя. Код и пароль — для входа на{" "}
-          <Link href="/teacher/login" className="text-blue-600 underline">
-            /teacher/login
-          </Link>
-        </p>
+        </>
+      }
+    >
 
         {credentials && (
           <CredentialsCard
@@ -121,48 +116,41 @@ export default function AdminTeachersPage() {
           />
         )}
 
-        <form
-          onSubmit={handleSubmit}
-          className="mb-8 space-y-4 rounded-xl border border-gray-200 bg-white p-6 shadow-sm"
-        >
+        <form onSubmit={handleSubmit} className="lc-card mb-8 space-y-4 p-6">
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              ФИО *
-            </label>
+            <label className="lc-label">ФИО *</label>
             <input
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               required
-              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+              className="lc-input"
               placeholder="Иванов Иван Иванович"
             />
           </div>
           <div>
-            <label className="mb-1 block text-sm font-medium text-gray-700">
-              Телефон
-            </label>
+            <label className="lc-label">Телефон</label>
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+              className="lc-input"
               placeholder="+998..."
             />
           </div>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="lc-alert lc-alert-error">{error}</p>}
           <button
             type="submit"
             disabled={loading}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 disabled:opacity-50"
+            className="lc-btn lc-btn-primary px-5 py-2.5 disabled:opacity-50"
           >
             {loading ? "Создание…" : "Добавить учителя"}
           </button>
         </form>
 
-        <h2 className="mb-3 font-semibold text-gray-900">
+        <h2 className="mb-2 text-lg font-bold text-slate-900">
           Список ({teachers.length})
         </h2>
-        <p className="mb-3 text-sm text-gray-500">
-          Код виден всегда. Пароль хранится в зашифрованном виде — посмотреть нельзя, только сбросить.
+        <p className="mb-4 text-sm text-slate-500">
+          Код виден всегда. Пароль зашифрован — только сброс.
         </p>
         <ul className="space-y-2">
           {teachers.map((t) => (
@@ -177,16 +165,17 @@ export default function AdminTeachersPage() {
           ))}
         </ul>
         {teachers.length === 0 && (
-          <p className="text-gray-500">Пока нет учителей</p>
+          <p className="lc-card-flat p-4 text-center text-slate-500">
+            Пока нет учителей
+          </p>
         )}
 
         <Link
           href="/admin/students"
-          className="mt-8 inline-block rounded-lg bg-green-600 px-4 py-2 text-white hover:bg-green-700"
+          className="lc-btn lc-btn-student mt-8 inline-flex px-5 py-2.5"
         >
           Шаг 2: добавить учеников →
         </Link>
-      </main>
-    </div>
+    </AdminSubLayout>
   );
 }

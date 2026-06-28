@@ -55,7 +55,7 @@ export default function StudentDashboardPage() {
   if (!data) {
     return (
       <MobileShell title="Кабинет ученика" subtitle="Загрузка...">
-        <p className="text-zinc-500">Загрузка...</p>
+        <p className="text-center text-slate-500">Загрузка...</p>
       </MobileShell>
     );
   }
@@ -70,17 +70,19 @@ export default function StudentDashboardPage() {
     >
       {tab === "home" && (
         <section className="space-y-4">
-          <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
-            <p className="text-sm text-zinc-500">Ваш код</p>
-            <p className="font-mono text-lg font-semibold text-emerald-600">
+          <div className="lc-card border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-5">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Ваш код
+            </p>
+            <p className="mt-1 font-mono text-xl font-bold text-emerald-600">
               {data.student.student_code}
             </p>
           </div>
 
           <div>
-            <h2 className="font-semibold text-zinc-900">Мои учителя</h2>
+            <h2 className="text-lg font-bold text-slate-900">Мои учителя</h2>
             {data.teachers.length === 0 ? (
-              <p className="mt-3 rounded-xl bg-zinc-100 p-4 text-sm text-zinc-500">
+              <p className="lc-card-flat mt-3 p-4 text-center text-sm text-slate-500">
                 Пока не назначены
               </p>
             ) : (
@@ -88,10 +90,10 @@ export default function StudentDashboardPage() {
                 {data.teachers.map((t, i) => (
                   <li
                     key={i}
-                    className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm"
+                    className="lc-card p-4"
                   >
-                    <p className="font-semibold">{t.teacher_name}</p>
-                    <p className="text-sm text-zinc-500">
+                    <p className="font-bold text-slate-900">{t.teacher_name}</p>
+                    <p className="text-sm text-slate-500">
                       Группа: {t.group_name}
                     </p>
                   </li>
@@ -103,7 +105,7 @@ export default function StudentDashboardPage() {
           <button
             type="button"
             onClick={logout}
-            className="w-full rounded-xl border border-zinc-300 py-3.5 font-medium text-zinc-700"
+            className="lc-btn lc-btn-ghost w-full py-3.5"
           >
             Выйти
           </button>
@@ -112,9 +114,9 @@ export default function StudentDashboardPage() {
 
       {tab === "grades" && (
         <section>
-          <h2 className="font-semibold text-zinc-900">Оценки</h2>
+          <h2 className="text-lg font-bold text-slate-900">Оценки</h2>
           {data.grades.length === 0 ? (
-            <p className="mt-4 rounded-xl bg-zinc-100 p-4 text-sm text-zinc-500">
+            <p className="lc-card-flat mt-4 p-4 text-center text-sm text-slate-500">
               Пока нет оценок
             </p>
           ) : (
@@ -122,12 +124,12 @@ export default function StudentDashboardPage() {
               {data.grades.map((g, i) => (
                 <li
                   key={i}
-                  className="rounded-2xl border border-indigo-100 bg-indigo-50 p-4"
+                  className="lc-card border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-4"
                 >
-                  <p className="font-semibold text-zinc-900">{g.title}</p>
-                  <p className="mt-1 text-2xl font-bold text-indigo-600">
+                  <p className="font-bold text-slate-900">{g.title}</p>
+                  <p className="mt-2 text-3xl font-bold text-indigo-600">
                     {g.score}
-                    <span className="text-base font-normal text-zinc-500">
+                    <span className="text-base font-normal text-slate-500">
                       {" "}
                       / {g.max_score}
                     </span>
@@ -142,9 +144,9 @@ export default function StudentDashboardPage() {
 
       {tab === "attendance" && (
         <section>
-          <h2 className="font-semibold text-zinc-900">Посещаемость</h2>
+          <h2 className="text-lg font-bold text-slate-900">Посещаемость</h2>
           {data.attendance.length === 0 ? (
-            <p className="mt-4 rounded-xl bg-zinc-100 p-4 text-sm text-zinc-500">
+            <p className="lc-card-flat mt-4 p-4 text-center text-sm text-slate-500">
               Пока нет отметок
             </p>
           ) : (
@@ -152,9 +154,9 @@ export default function StudentDashboardPage() {
               {data.attendance.map((a, i) => (
                 <li
                   key={i}
-                  className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm"
+                  className="lc-card p-4"
                 >
-                  <p className="font-medium text-zinc-900">{a.lesson_date}</p>
+                  <p className="font-bold text-slate-900">{a.lesson_date}</p>
                   <p className="mt-1 text-sm">
                     {statusLabel[a.status] ?? a.status}
                   </p>
