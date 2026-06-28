@@ -29,7 +29,7 @@ export default function AdminPage() {
           Отчёт владельца
         </h2>
         <p className="mt-3 max-w-2xl leading-relaxed text-slate-600">
-          Сколько учеников, доход, кто оплатил, кто должен по датам, прибыль за месяц.
+          Наличные оплаты: сколько учеников, кто заплатил в центре, кто должен, прибыль.
         </p>
         <p className="mt-6 font-semibold text-violet-600">Открыть отчёт →</p>
       </Link>

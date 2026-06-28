@@ -1,4 +1,5 @@
 -- Запусти в Supabase SQL Editor (один раз)
+-- Это НЕ онлайн-оплата! Таблица для учёта наличных: кто заплатил в центре, кто должен.
 
 ALTER TABLE students ADD COLUMN IF NOT EXISTS monthly_fee NUMERIC(12,2) DEFAULT 500000;
 

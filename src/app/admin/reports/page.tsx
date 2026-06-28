@@ -106,7 +106,7 @@ export default function OwnerReportsPage() {
   return (
     <AdminSubLayout
       title="Отчёт владельца"
-      description="Доход, долги учеников и прибыль по месяцам. Отчёт по учителям — позже."
+      description="Учёт наличных оплат в центре — кто заплатил, кто должен, доход и прибыль. Онлайн-оплаты нет."
     >
       <div className="mb-6 flex flex-wrap items-end gap-4">
         <div>
@@ -165,7 +165,7 @@ export default function OwnerReportsPage() {
 
             <div className="lc-card border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-5">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Доход (оплачено)
+                Получено наличными
               </p>
               <p className="mt-2 text-2xl font-bold text-emerald-700">
                 {formatMoney(s.total_income)}
@@ -259,7 +259,7 @@ export default function OwnerReportsPage() {
                             onClick={() => markPaid(p.id)}
                             className="lc-btn lc-btn-primary px-3 py-1.5 text-xs"
                           >
-                            Оплатил
+                            Получил наличные
                           </button>
                         )}
                       </div>
