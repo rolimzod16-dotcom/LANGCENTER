@@ -194,7 +194,9 @@ export default function AdminStudentsPage() {
             />
           </div>
           <div>
-            <label className="lc-label">Оплата в месяц (сум)</label>
+            <label className="lc-label">
+              Оплата в месяц (сум) — только для отчёта владельца, ученик не видит
+            </label>
             <input
               type="number"
               min={0}
