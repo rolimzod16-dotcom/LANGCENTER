@@ -15,9 +15,25 @@ export default function AdminPage() {
 
   return (
     <AppShell
-      title="Панель администратора"
-      subtitle="Два простых шага — сначала учителя, потом ученики"
+      title="Панель владельца"
+      subtitle="Управление центром, ученики и финансовый отчёт"
     >
+      <Link
+        href="/admin/reports"
+        className="lc-link-card mb-8 block border-violet-200 bg-gradient-to-br from-violet-50 via-white to-indigo-50 p-8"
+      >
+        <span className="inline-flex rounded-full bg-violet-100 px-3 py-1 text-xs font-bold uppercase tracking-wide text-violet-700">
+          Финансы
+        </span>
+        <h2 className="mt-4 text-2xl font-bold text-slate-900">
+          Отчёт владельца
+        </h2>
+        <p className="mt-3 max-w-2xl leading-relaxed text-slate-600">
+          Сколько учеников, доход, кто оплатил, кто должен по датам, прибыль за месяц.
+        </p>
+        <p className="mt-6 font-semibold text-violet-600">Открыть отчёт →</p>
+      </Link>
+
       <div className="grid gap-6 md:grid-cols-2">
         <Link
           href="/admin/teachers"

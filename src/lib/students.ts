@@ -92,6 +92,7 @@ export async function createStudent(input: {
   last_name: string;
   email?: string;
   phone?: string;
+  monthly_fee?: number;
 }): Promise<CreateStudentResult> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен. Проверь .env.local");
@@ -101,15 +102,20 @@ export async function createStudent(input: {
   const passwordHash = bcrypt.hashSync(plainPassword, 10);
   const fullName = `${input.last_name.trim()} ${input.first_name.trim()}`.trim();
 
+  const insertRow: Record<string, unknown> = {
+    full_name: fullName,
+    phone: input.phone?.trim() || null,
+    student_code: studentCode,
+    password_hash: passwordHash,
+    status: "active",
+  };
+  if (input.monthly_fee !== undefined && input.monthly_fee > 0) {
+    insertRow.monthly_fee = input.monthly_fee;
+  }
+
   const { data, error } = await supabase
     .from("students")
-    .insert({
-      full_name: fullName,
-      phone: input.phone?.trim() || null,
-      student_code: studentCode,
-      password_hash: passwordHash,
-      status: "active",
-    })
+    .insert(insertRow)
     .select("id, full_name, phone, student_code, status, created_at")
     .single();
 

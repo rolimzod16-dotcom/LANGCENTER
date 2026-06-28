@@ -39,11 +39,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const monthlyFee = body.monthly_fee ? Number(body.monthly_fee) : undefined;
+
     const student = await createStudent({
       first_name: firstName,
       last_name: lastName,
       email: body.email ? String(body.email) : undefined,
       phone: body.phone ? String(body.phone) : undefined,
+      monthly_fee: monthlyFee,
     });
 
     await assignStudentToTeacher(student.id, teacherId);

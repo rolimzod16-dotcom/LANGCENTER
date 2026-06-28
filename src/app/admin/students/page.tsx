@@ -21,6 +21,7 @@ export default function AdminStudentsPage() {
   const [teacherId, setTeacherId] = useState("");
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  const [monthlyFee, setMonthlyFee] = useState("500000");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [credentials, setCredentials] = useState<{
@@ -88,6 +89,7 @@ export default function AdminStudentsPage() {
           last_name,
           phone: phone || undefined,
           teacher_id: teacherId,
+          monthly_fee: Number(monthlyFee) || 500000,
         }),
       });
       const data = await res.json();
@@ -189,6 +191,17 @@ export default function AdminStudentsPage() {
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               className="lc-input"
+            />
+          </div>
+          <div>
+            <label className="lc-label">Оплата в месяц (сум)</label>
+            <input
+              type="number"
+              min={0}
+              value={monthlyFee}
+              onChange={(e) => setMonthlyFee(e.target.value)}
+              className="lc-input"
+              placeholder="500000"
             />
           </div>
           {error && <p className="lc-alert lc-alert-error">{error}</p>}

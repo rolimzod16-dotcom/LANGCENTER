@@ -33,6 +33,8 @@ function isProtectedAdminApi(pathname: string): boolean {
     return pathname !== "/api/students/login";
   }
   if (pathname === "/api/assign") return true;
+  if (pathname.startsWith("/api/owner")) return true;
+  if (pathname.startsWith("/api/payments")) return true;
   return false;
 }
 
@@ -61,5 +63,12 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/api/teachers/:path*", "/api/students/:path*", "/api/assign"],
+  matcher: [
+    "/admin/:path*",
+    "/api/teachers/:path*",
+    "/api/students/:path*",
+    "/api/assign",
+    "/api/owner/:path*",
+    "/api/payments/:path*",
+  ],
 };
