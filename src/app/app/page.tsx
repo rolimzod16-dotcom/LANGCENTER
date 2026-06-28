@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ApkDownloadButton } from "@/components/mobile/ApkDownloadButton";
 import { InstallBanner } from "@/components/mobile/InstallBanner";
 
 export default function MobileAppPage() {
@@ -15,7 +16,23 @@ export default function MobileAppPage() {
           </p>
         </div>
 
+        <ApkDownloadButton />
+
+        <div className="my-4 rounded-2xl border border-zinc-200 bg-white p-4 text-sm text-zinc-600">
+          <p className="font-medium text-zinc-900">Как установить APK</p>
+          <ol className="mt-2 list-decimal space-y-1 pl-5">
+            <li>Нажмите «Скачать для Android»</li>
+            <li>Откройте скачанный файл</li>
+            <li>Разрешите установку, если телефон спросит</li>
+            <li>Готово — откройте Lang Center</li>
+          </ol>
+        </div>
+
         <InstallBanner />
+
+        <p className="mb-3 text-center text-xs font-medium uppercase tracking-wide text-zinc-400">
+          или войти в браузере
+        </p>
 
         <div className="space-y-3">
           <Link
