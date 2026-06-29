@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildDayReportCsv, buildMonthReportCsv } from "@/lib/report-export";
+import { buildDayReportExcel, buildMonthReportExcel } from "@/lib/report-export";
 import type { PaymentListFilter } from "@/lib/payments";
 import { todayIso } from "@/lib/payments";
 
@@ -19,19 +19,19 @@ export async function GET(request: NextRequest) {
     const view = params.get("view") ?? "month";
     const search = params.get("search") ?? "";
 
-    let csv: string;
+    let content: string;
     let filename: string;
 
     if (view === "day") {
       const date = (params.get("date") ?? todayIso()).slice(0, 10);
       const sectionParam = params.get("section") ?? "received";
       const section = SECTIONS.has(sectionParam) ? sectionParam : "received";
-      const result = await buildDayReportCsv({
+      const result = await buildDayReportExcel({
         date,
         section: section as "received" | "due",
         search,
       });
-      csv = result.csv;
+      content = result.content;
       filename = result.filename;
     } else {
       const monthParam = params.get("month") ?? todayIso().slice(0, 7) + "-01";
@@ -41,18 +41,18 @@ export async function GET(request: NextRequest) {
         ? (filterParam as PaymentListFilter)
         : "all";
 
-      const result = await buildMonthReportCsv({
+      const result = await buildMonthReportExcel({
         periodMonth,
         filter,
         search,
       });
-      csv = result.csv;
+      content = result.content;
       filename = result.filename;
     }
 
-    return new NextResponse(csv, {
+    return new NextResponse(content, {
       headers: {
-        "Content-Type": "text/csv; charset=utf-8",
+        "Content-Type": "application/vnd.ms-excel; charset=utf-8",
         "Content-Disposition": `attachment; filename="${filename}"`,
         "Cache-Control": "no-store",
       },

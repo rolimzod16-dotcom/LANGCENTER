@@ -203,7 +203,27 @@ async function buildOwnerPaymentsForMonth(
     });
   }
 
-  return merged.sort((a, b) => a.due_date.localeCompare(b.due_date));
+  return sortOwnerPayments(merged);
+}
+
+const STATUS_SORT_ORDER: Record<string, number> = {
+  overdue: 0,
+  pending: 1,
+  partial: 2,
+  new: 3,
+  paid: 4,
+};
+
+function paymentSortKey(payment: StudentPayment): string {
+  const statusKey = !payment.has_invoice ? "new" : payment.status;
+  const order = String(STATUS_SORT_ORDER[statusKey] ?? 99).padStart(2, "0");
+  return `${order}|${payment.student_name.toLocaleLowerCase("ru")}|${payment.student_code}`;
+}
+
+export function sortOwnerPayments(payments: StudentPayment[]): StudentPayment[] {
+  return [...payments].sort((a, b) =>
+    paymentSortKey(a).localeCompare(paymentSortKey(b), "ru"),
+  );
 }
 
 function matchesPaymentFilter(
