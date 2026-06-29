@@ -318,6 +318,21 @@ export default function OwnerReportsPage() {
     setPage(1);
   }
 
+  function buildExportUrl() {
+    const params = new URLSearchParams();
+    if (viewMode === "day") {
+      params.set("view", "day");
+      params.set("date", day);
+      params.set("section", daySection);
+    } else {
+      params.set("view", "month");
+      params.set("month", `${month}-01`);
+      params.set("filter", filter);
+    }
+    if (search.trim()) params.set("search", search.trim());
+    return `/api/owner/reports/export?${params}`;
+  }
+
   void tick;
 
   const periodMonthForDay = `${day.slice(0, 7)}-01`;
@@ -396,12 +411,22 @@ export default function OwnerReportsPage() {
         <Link href="/admin" className="lc-btn lc-btn-ghost px-4 py-2.5 text-sm">
           ← Панель
         </Link>
+        <a
+          href={buildExportUrl()}
+          className="lc-btn border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-100"
+        >
+          Скачать отчёт (Excel)
+        </a>
         {lastUpdated && (
           <p className="text-sm text-slate-500">
             Обновлено {secondsAgo(lastUpdated)}
           </p>
         )}
       </div>
+      <p className="mb-6 text-sm text-slate-500">
+        Скачивание учитывает текущий фильтр и поиск — в файле все подходящие
+        ученики, не только видимые на странице.
+      </p>
 
       {error && (
         <div className="lc-alert lc-alert-error mb-6">

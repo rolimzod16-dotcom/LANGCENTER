@@ -243,6 +243,16 @@ export async function getOwnerPaymentsSummary(periodMonth: string) {
   return summarizeOwnerPayments(payments);
 }
 
+export function filterOwnerPayments(
+  payments: StudentPayment[],
+  filter: PaymentListFilter = "all",
+  search = "",
+): StudentPayment[] {
+  return payments.filter(
+    (p) => matchesPaymentFilter(p, filter) && matchesPaymentSearch(p, search),
+  );
+}
+
 export function paginateOwnerPayments(
   payments: StudentPayment[],
   query: Omit<OwnerPaymentsQuery, "periodMonth">,
@@ -252,9 +262,7 @@ export function paginateOwnerPayments(
   const filter = query.filter ?? "all";
   const search = query.search ?? "";
 
-  const filtered = payments.filter(
-    (p) => matchesPaymentFilter(p, filter) && matchesPaymentSearch(p, search),
-  );
+  const filtered = filterOwnerPayments(payments, filter, search);
 
   const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / limit));
