@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { authCookieOptions } from "@/lib/auth/cookie-options";
 
 export type SessionRole = "student" | "teacher";
 
@@ -7,14 +8,16 @@ const COOKIE_ID = "lc_id";
 
 export async function setSession(role: SessionRole, id: string) {
   const jar = await cookies();
-  jar.set(COOKIE_ROLE, role, { httpOnly: true, sameSite: "lax", path: "/" });
-  jar.set(COOKIE_ID, id, { httpOnly: true, sameSite: "lax", path: "/" });
+  const opts = authCookieOptions();
+  jar.set(COOKIE_ROLE, role, opts);
+  jar.set(COOKIE_ID, id, opts);
 }
 
 export async function clearSession() {
   const jar = await cookies();
-  jar.delete(COOKIE_ROLE);
-  jar.delete(COOKIE_ID);
+  const opts = authCookieOptions(0);
+  jar.set(COOKIE_ROLE, "", opts);
+  jar.set(COOKIE_ID, "", opts);
 }
 
 export async function getSession(): Promise<{

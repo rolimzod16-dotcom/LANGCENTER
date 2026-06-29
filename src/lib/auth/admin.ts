@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { timingSafeEqual } from "crypto";
+import { authCookieOptions } from "@/lib/auth/cookie-options";
 import { ADMIN_COOKIE } from "@/lib/auth/admin-constants";
 
 export { ADMIN_COOKIE } from "@/lib/auth/admin-constants";
@@ -21,17 +22,11 @@ export function verifyAdminPassword(password: string): boolean {
 
 export async function setAdminSession() {
   const jar = await cookies();
-  jar.set(ADMIN_COOKIE, "1", {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/",
-    secure: process.env.NODE_ENV === "production",
-    maxAge: 60 * 60 * 12,
-  });
+  jar.set(ADMIN_COOKIE, "1", authCookieOptions());
 }
 
 export async function clearAdminSession() {
   const jar = await cookies();
-  jar.delete(ADMIN_COOKIE);
+  jar.set(ADMIN_COOKIE, "", authCookieOptions(0));
 }
 

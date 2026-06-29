@@ -1,8 +1,12 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LoginLayout } from "@/components/layout/LoginLayout";
+import {
+  readRememberedCode,
+  saveRememberedCode,
+} from "@/lib/auth/remember-login";
 
 export default function StudentLoginPage() {
   const router = useRouter();
@@ -11,6 +15,15 @@ export default function StudentLoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const saved = readRememberedCode("student");
+    if (saved) setCode(saved);
+
+    fetch("/api/student/me", { credentials: "same-origin" }).then((res) => {
+      if (res.ok) router.replace("/student/dashboard");
+    });
+  }, [router]);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -18,6 +31,7 @@ export default function StudentLoginPage() {
     const res = await fetch("/api/students/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify({ student_code: code, password }),
     });
     const data = await res.json();
@@ -26,6 +40,7 @@ export default function StudentLoginPage() {
       setError(data.error ?? "Ошибка входа");
       return;
     }
+    saveRememberedCode("student", code);
     router.push("/student/dashboard");
   }
 

@@ -1,8 +1,12 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LoginLayout } from "@/components/layout/LoginLayout";
+import {
+  readRememberedCode,
+  saveRememberedCode,
+} from "@/lib/auth/remember-login";
 
 export default function TeacherLoginPage() {
   const router = useRouter();
@@ -11,6 +15,15 @@ export default function TeacherLoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    const saved = readRememberedCode("teacher");
+    if (saved) setCode(saved);
+
+    fetch("/api/teacher/me", { credentials: "same-origin" }).then((res) => {
+      if (res.ok) router.replace("/teacher/dashboard");
+    });
+  }, [router]);
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setLoading(true);
@@ -18,6 +31,7 @@ export default function TeacherLoginPage() {
     const res = await fetch("/api/teachers/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify({ teacher_code: code, password }),
     });
     const data = await res.json();
@@ -26,6 +40,7 @@ export default function TeacherLoginPage() {
       setError(data.error ?? "Ошибка входа");
       return;
     }
+    saveRememberedCode("teacher", code);
     router.push("/teacher/dashboard");
   }
 
