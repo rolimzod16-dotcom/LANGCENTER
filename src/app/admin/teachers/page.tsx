@@ -24,6 +24,7 @@ export default function AdminTeachersPage() {
     password: string;
   } | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
+  const [listError, setListError] = useState("");
 
   const parseFullName = (fullName: string) => {
     const parts = fullName.trim().split(/\s+/);
@@ -32,9 +33,19 @@ export default function AdminTeachersPage() {
   };
 
   const load = async () => {
-    const res = await fetch("/api/teachers");
+    setListError("");
+    const res = await fetch("/api/teachers", { credentials: "include" });
     const data = await res.json();
-    if (res.ok) setTeachers(data.teachers ?? []);
+    if (res.ok) {
+      setTeachers(data.teachers ?? []);
+      return;
+    }
+    setListError(
+      data.error ??
+        (res.status === 401
+          ? "Нет доступа. Войдите в админку заново."
+          : "Не удалось загрузить учителей. Запустите supabase/TEACHERS.sql в Supabase."),
+    );
   };
 
   useEffect(() => {
@@ -106,6 +117,10 @@ export default function AdminTeachersPage() {
         </>
       }
     >
+
+        {listError && (
+          <div className="lc-alert lc-alert-error mb-6">{listError}</div>
+        )}
 
         {credentials && (
           <CredentialsCard

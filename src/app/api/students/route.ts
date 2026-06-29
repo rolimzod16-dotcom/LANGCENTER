@@ -5,6 +5,12 @@ import {
 } from "@/lib/groups";
 import { ensureStudentPaymentForMonth } from "@/lib/payments";
 import {
+  currentPeriodMonth,
+  filterOwnerPayments,
+  getOwnerPaymentsForMonth,
+  type PaymentListFilter,
+} from "@/lib/payments";
+import {
   createStudent,
   getStudentsSummary,
   listStudentsPage,
@@ -12,6 +18,13 @@ import {
 } from "@/lib/students";
 
 const STATUSES = new Set<StudentListStatus>(["all", "active", "inactive"]);
+const PAYMENT_FILTERS = new Set<PaymentListFilter | "all">([
+  "all",
+  "paid",
+  "debt",
+  "overdue",
+  "new",
+]);
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,10 +38,30 @@ export async function GET(request: NextRequest) {
     const status = STATUSES.has(statusParam as StudentListStatus)
       ? (statusParam as StudentListStatus)
       : "all";
+    const paymentFilterParam = params.get("payment_filter") ?? "all";
+    const payment_filter = PAYMENT_FILTERS.has(
+      paymentFilterParam as PaymentListFilter | "all",
+    )
+      ? (paymentFilterParam as PaymentListFilter | "all")
+      : "all";
 
     if (summaryOnly) {
       const summary = await getStudentsSummary();
       return NextResponse.json({ summary });
+    }
+
+    let studentIds: string[] | undefined;
+    if (payment_filter !== "all") {
+      try {
+        const payments = await getOwnerPaymentsForMonth(currentPeriodMonth());
+        studentIds = filterOwnerPayments(payments, payment_filter, "").map(
+          (p) => p.student_id,
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "";
+        if (!msg.includes("student_payments")) throw err;
+        studentIds = [];
+      }
     }
 
     const result = await listStudentsPage({
@@ -37,6 +70,7 @@ export async function GET(request: NextRequest) {
       search,
       teacher_id: teacherId || undefined,
       status,
+      student_ids: studentIds,
     });
 
     const teacherNames = await getTeacherNamesByStudentIds(

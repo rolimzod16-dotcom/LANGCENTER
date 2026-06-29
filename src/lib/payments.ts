@@ -1,3 +1,9 @@
+import {
+  displayName,
+  mapRawStudent,
+  type RawStudentRow,
+} from "@/lib/student-schema";
+import { fetchAllStudentsRows } from "@/lib/students";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export type PaymentStatus = "pending" | "paid" | "partial" | "overdue";
@@ -50,7 +56,7 @@ export function computeStatus(
   return dueDate < today ? "overdue" : "pending";
 }
 
-function mapPayment(row: {
+type PaymentDbRow = {
   id: string;
   student_id: string;
   amount_due: number;
@@ -60,28 +66,24 @@ function mapPayment(row: {
   status: string;
   period_month: string;
   note: string | null;
-  students?:
-    | {
-        full_name: string;
-        student_code: string;
-        start_date?: string | null;
-        payment_due_day?: number | null;
-      }
-    | {
-        full_name: string;
-        student_code: string;
-        start_date?: string | null;
-        payment_due_day?: number | null;
-      }[];
-}): StudentPayment {
-  const student = Array.isArray(row.students) ? row.students[0] : row.students;
+};
+
+function mapPayment(
+  row: PaymentDbRow,
+  student?: {
+    name: string;
+    code: string;
+    start_date: string | null;
+    payment_due_day: number | null;
+  },
+): StudentPayment {
   const amountDue = Number(row.amount_due);
   const amountPaid = Number(row.amount_paid);
   return {
     id: row.id,
     student_id: row.student_id,
-    student_name: student?.full_name ?? "—",
-    student_code: student?.student_code ?? "—",
+    student_name: student?.name ?? "—",
+    student_code: student?.code ?? "—",
     amount_due: amountDue,
     amount_paid: amountPaid,
     due_date: row.due_date,
@@ -93,6 +95,28 @@ function mapPayment(row: {
     payment_due_day: student?.payment_due_day ?? null,
     has_invoice: true,
   };
+}
+
+async function studentLookupMap(
+  supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+) {
+  const { rows, schema } = await fetchAllStudentsRows(supabase);
+  return new Map(
+    rows.map((row) => {
+      const student = mapRawStudent(row, schema);
+      return [
+        student.id,
+        {
+          name: displayName(student),
+          code: student.student_code,
+          start_date: student.start_date,
+          payment_due_day: student.payment_due_day,
+          is_active: student.is_active,
+          monthly_fee: Number(row.monthly_fee ?? 500000),
+        },
+      ] as const;
+    }),
+  );
 }
 
 export type PaymentListFilter = "all" | "paid" | "debt" | "overdue" | "new";
@@ -131,15 +155,10 @@ async function buildOwnerPaymentsForMonth(
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");
 
-  const { data: students, error: studentsError } = await supabase
-    .from("students")
-    .select(
-      "id, full_name, student_code, monthly_fee, start_date, payment_due_day",
-    )
-    .eq("status", "active")
-    .order("full_name", { ascending: true });
-
-  if (studentsError) throw new Error(studentsError.message);
+  const { rows, schema } = await fetchAllStudentsRows(supabase);
+  const students = rows
+    .map((row) => ({ row, student: mapRawStudent(row, schema) }))
+    .filter(({ student }) => student.is_active);
 
   let payments: StudentPayment[] = [];
   try {
@@ -152,7 +171,7 @@ async function buildOwnerPaymentsForMonth(
   const paymentByStudent = new Map(payments.map((p) => [p.student_id, p]));
   const merged: StudentPayment[] = [];
 
-  for (const student of students ?? []) {
+  for (const { row, student } of students) {
     if (!studentStartedInPeriod(student.start_date, periodMonth)) continue;
 
     const existing = paymentByStudent.get(student.id);
@@ -161,14 +180,15 @@ async function buildOwnerPaymentsForMonth(
       continue;
     }
 
-    const fee = Number(student.monthly_fee ?? 500000);
+    const raw = row as RawStudentRow;
+    const fee = Number(raw.monthly_fee ?? 500000);
     const dueDay = Number(student.payment_due_day ?? 10);
     const dueDate = dueDateFromPeriod(periodMonth, dueDay);
 
     merged.push({
       id: null,
       student_id: student.id,
-      student_name: student.full_name,
+      student_name: displayName(student),
       student_code: student.student_code,
       amount_due: fee,
       amount_paid: 0,
@@ -292,34 +312,34 @@ export async function listPaymentsForMonth(periodMonth: string) {
   const { data, error } = await supabase
     .from("student_payments")
     .select(
-      "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note, students(full_name, student_code, start_date, payment_due_day)",
+      "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note",
     )
     .eq("period_month", periodMonth)
     .order("due_date", { ascending: true });
 
   if (error) throw new Error(error.message);
-  return (data ?? []).map(mapPayment);
+
+  const students = await studentLookupMap(supabase);
+  return (data ?? []).map((row) =>
+    mapPayment(row as PaymentDbRow, students.get(row.student_id)),
+  );
 }
 
 export async function generateMonthlyPayments(periodMonth: string) {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");
 
-  const { data: students, error: studentsError } = await supabase
-    .from("students")
-    .select("id, monthly_fee, start_date, payment_due_day")
-    .eq("status", "active");
-
-  if (studentsError) throw new Error(studentsError.message);
-
-  const rows = (students ?? [])
-    .filter((student) => studentStartedInPeriod(student.start_date, periodMonth))
-    .map((student) => {
-      const fee = Number(student.monthly_fee ?? 500000);
+  const students = await studentLookupMap(supabase);
+  const rows = [...students.entries()]
+    .filter(([, student]) => student.is_active)
+    .filter(([, student]) =>
+      studentStartedInPeriod(student.start_date, periodMonth),
+    )
+    .map(([studentId, student]) => {
       const dueDay = Number(student.payment_due_day ?? 10);
       return {
-        student_id: student.id,
-        amount_due: fee,
+        student_id: studentId,
+        amount_due: student.monthly_fee,
         amount_paid: 0,
         due_date: dueDateFromPeriod(periodMonth, dueDay),
         status: "pending" as const,
@@ -348,17 +368,11 @@ export async function ensureStudentPaymentForMonth(
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");
 
-  const { data: student, error } = await supabase
-    .from("students")
-    .select("id, monthly_fee, start_date, payment_due_day, status")
-    .eq("id", studentId)
-    .single();
-
-  if (error) throw new Error(error.message);
-  if (student.status !== "active") return null;
+  const students = await studentLookupMap(supabase);
+  const student = students.get(studentId);
+  if (!student?.is_active) return null;
   if (!studentStartedInPeriod(student.start_date, periodMonth)) return null;
 
-  const fee = Number(student.monthly_fee ?? 500000);
   const dueDay = Number(student.payment_due_day ?? 10);
   const dueDate = dueDateFromPeriod(periodMonth, dueDay);
 
@@ -367,7 +381,7 @@ export async function ensureStudentPaymentForMonth(
     .upsert(
       {
         student_id: studentId,
-        amount_due: fee,
+        amount_due: student.monthly_fee,
         amount_paid: 0,
         due_date: dueDate,
         status: "pending",
@@ -376,12 +390,12 @@ export async function ensureStudentPaymentForMonth(
       { onConflict: "student_id,period_month" },
     )
     .select(
-      "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note, students(full_name, student_code, start_date, payment_due_day)",
+      "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note",
     )
     .single();
 
   if (upsertError) throw new Error(upsertError.message);
-  return mapPayment(payment);
+  return mapPayment(payment as PaymentDbRow, student);
 }
 
 export async function markPaymentPaid(paymentId: string, amountPaid?: number) {
@@ -408,12 +422,13 @@ export async function markPaymentPaid(paymentId: string, amountPaid?: number) {
     })
     .eq("id", paymentId)
     .select(
-      "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note, students(full_name, student_code, start_date, payment_due_day)",
+      "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note",
     )
     .single();
 
   if (error) throw new Error(error.message);
-  return mapPayment(data);
+  const students = await studentLookupMap(supabase);
+  return mapPayment(data as PaymentDbRow, students.get(data.student_id));
 }
 
 export function periodMonthFromDate(date: string): string {
@@ -441,7 +456,7 @@ export async function listPaymentsReceivedOnDate(date: string) {
   const { data, error } = await supabase
     .from("student_payments")
     .select(
-      "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note, students(full_name, student_code, start_date, payment_due_day)",
+      "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note",
     )
     .gte("paid_at", `${date}T00:00:00.000Z`)
     .lt("paid_at", `${end}T00:00:00.000Z`)
@@ -449,7 +464,10 @@ export async function listPaymentsReceivedOnDate(date: string) {
     .order("paid_at", { ascending: false });
 
   if (error) throw new Error(error.message);
-  return (data ?? []).map(mapPayment);
+  const students = await studentLookupMap(supabase);
+  return (data ?? []).map((row) =>
+    mapPayment(row as PaymentDbRow, students.get(row.student_id)),
+  );
 }
 
 export function getMonthDailyBreakdown(

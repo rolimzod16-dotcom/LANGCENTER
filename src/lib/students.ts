@@ -1,6 +1,16 @@
 import bcrypt from "bcryptjs";
 import { customAlphabet } from "nanoid";
 import { getStudentIdsForTeacher } from "@/lib/groups";
+import {
+  displayName,
+  isSchemaColumnError,
+  mapRawStudent,
+  STUDENT_SELECT_ATTEMPTS,
+  STUDENT_SELECT_LEGACY,
+  STUDENT_SELECT_MODERN,
+  type RawStudentRow,
+  type StudentSchemaMode,
+} from "@/lib/student-schema";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 const generateCodePart = customAlphabet("ABCDEFGHJKLMNPQRSTUVWXYZ23456789", 6);
@@ -26,44 +36,29 @@ export type CreateStudentResult = StudentRow & {
   plain_password: string;
 };
 
-type DbStudent = {
-  id: string;
-  full_name: string;
-  phone: string | null;
-  student_code: string;
-  status: string;
-  created_at: string;
-  password_hash?: string;
-  start_date?: string | null;
-  payment_due_day?: number | null;
+export type StudentListStatus = "all" | "active" | "inactive";
+
+export type StudentsListQuery = {
+  page?: number;
+  limit?: number;
+  search?: string;
+  teacher_id?: string;
+  status?: StudentListStatus;
+  student_ids?: string[];
 };
 
-function parseFullName(fullName: string): { first_name: string; last_name: string } {
-  const parts = fullName.trim().split(/\s+/);
-  if (parts.length === 1) {
-    return { first_name: parts[0], last_name: "" };
-  }
-  return {
-    last_name: parts[0],
-    first_name: parts.slice(1).join(" "),
-  };
-}
+export type StudentsSummary = {
+  total: number;
+  active: number;
+};
 
-function mapStudent(row: DbStudent): StudentRow {
-  const { first_name, last_name } = parseFullName(row.full_name);
-  return {
-    id: row.id,
-    first_name,
-    last_name,
-    email: null,
-    phone: row.phone,
-    student_code: row.student_code,
-    is_active: row.status === "active",
-    created_at: row.created_at,
-    start_date: row.start_date ?? null,
-    payment_due_day: row.payment_due_day ?? null,
-  };
-}
+export type PaginatedStudents = {
+  students: StudentRow[];
+  total: number;
+  page: number;
+  limit: number;
+  total_pages: number;
+};
 
 async function generateUniqueCode(
   supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
@@ -81,48 +76,75 @@ async function generateUniqueCode(
   throw new Error("Не удалось сгенерировать код");
 }
 
-export type StudentListStatus = "all" | "active" | "inactive";
+export async function fetchAllStudentsRows(
+  supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+) {
+  let lastError = "Не удалось прочитать таблицу students";
 
-export type StudentsListQuery = {
-  page?: number;
-  limit?: number;
-  search?: string;
-  teacher_id?: string;
-  status?: StudentListStatus;
-};
+  for (const attempt of STUDENT_SELECT_ATTEMPTS) {
+    const { data, error } = await supabase
+      .from("students")
+      .select(attempt.select)
+      .order(attempt.schema === "modern" ? "full_name" : "last_name", {
+        ascending: true,
+      });
 
-export type StudentsSummary = {
-  total: number;
-  active: number;
-};
+    if (!error) {
+      return {
+        rows: (data ?? []) as unknown as RawStudentRow[],
+        schema: attempt.schema,
+      };
+    }
 
-export type PaginatedStudents = {
-  students: StudentRow[];
-  total: number;
-  page: number;
-  limit: number;
-  total_pages: number;
-};
+    lastError = error.message;
+    if (!isSchemaColumnError(error.message)) {
+      throw new Error(error.message);
+    }
+  }
 
-const STUDENT_LIST_COLUMNS =
-  "id, full_name, phone, student_code, status, created_at, start_date, payment_due_day";
+  throw new Error(lastError);
+}
+
+function applyStudentFilters(
+  rows: RawStudentRow[],
+  schema: StudentSchemaMode,
+  query: StudentsListQuery,
+  allowedIds: Set<string> | null,
+) {
+  const search = query.search?.trim().toLowerCase() ?? "";
+  const status = query.status ?? "all";
+
+  return rows.filter((row) => {
+    const student = mapRawStudent(row, schema);
+
+    if (allowedIds && !allowedIds.has(student.id)) {
+      return false;
+    }
+
+    if (status === "active" && !student.is_active) return false;
+    if (status === "inactive" && student.is_active) return false;
+
+    if (!search) return true;
+    const haystack = [
+      displayName(student),
+      student.student_code,
+      student.phone ?? "",
+    ]
+      .join(" ")
+      .toLowerCase();
+    return haystack.includes(search);
+  });
+}
 
 export async function getStudentsSummary(): Promise<StudentsSummary> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен. Проверь .env.local");
 
-  const { count: total } = await supabase
-    .from("students")
-    .select("id", { count: "exact", head: true });
-
-  const { count: active } = await supabase
-    .from("students")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "active");
-
+  const { rows, schema } = await fetchAllStudentsRows(supabase);
+  const students = rows.map((row) => mapRawStudent(row, schema));
   return {
-    total: total ?? 0,
-    active: active ?? 0,
+    total: students.length,
+    active: students.filter((s) => s.is_active).length,
   };
 }
 
@@ -134,67 +156,56 @@ export async function listStudentsPage(
 
   const page = Math.max(1, query.page ?? 1);
   const limit = Math.min(Math.max(query.limit ?? 50, 1), 100);
-  const search = query.search?.trim() ?? "";
-  const status = query.status ?? "all";
 
-  let teacherStudentIds: string[] | null = null;
+  let allowedIds: Set<string> | null = null;
+
   if (query.teacher_id) {
-    teacherStudentIds = await getStudentIdsForTeacher(query.teacher_id);
-    if (teacherStudentIds.length === 0) {
+    const ids = await getStudentIdsForTeacher(query.teacher_id);
+    allowedIds = new Set(ids);
+    if (allowedIds.size === 0) {
       return { students: [], total: 0, page: 1, limit, total_pages: 1 };
     }
   }
 
-  let dbQuery = supabase
-    .from("students")
-    .select(STUDENT_LIST_COLUMNS, { count: "exact" });
-
-  if (status === "active") dbQuery = dbQuery.eq("status", "active");
-  if (status === "inactive") dbQuery = dbQuery.neq("status", "active");
-
-  if (teacherStudentIds) {
-    dbQuery = dbQuery.in("id", teacherStudentIds);
+  if (query.student_ids) {
+    const paymentIds = new Set(query.student_ids);
+    allowedIds = allowedIds
+      ? new Set([...allowedIds].filter((id) => paymentIds.has(id)))
+      : paymentIds;
+    if (allowedIds.size === 0) {
+      return { students: [], total: 0, page: 1, limit, total_pages: 1 };
+    }
   }
 
-  if (search) {
-    const pattern = `%${search}%`;
-    dbQuery = dbQuery.or(
-      `full_name.ilike.${pattern},student_code.ilike.${pattern},phone.ilike.${pattern}`,
-    );
-  }
+  const { rows, schema } = await fetchAllStudentsRows(supabase);
 
-  const from = (page - 1) * limit;
-  const to = from + limit - 1;
+  let filtered = applyStudentFilters(rows, schema, query, allowedIds);
 
-  const { data, error, count } = await dbQuery
-    .order("full_name", { ascending: true })
-    .range(from, to);
+  filtered.sort((a, b) =>
+    displayName(mapRawStudent(a, schema)).localeCompare(
+      displayName(mapRawStudent(b, schema)),
+      "ru",
+    ),
+  );
 
-  if (error) throw new Error(error.message);
-
-  const total = count ?? 0;
+  const total = filtered.length;
   const totalPages = Math.max(1, Math.ceil(total / limit));
+  const safePage = Math.min(page, totalPages);
+  const start = (safePage - 1) * limit;
+  const pageRows = filtered.slice(start, start + limit);
 
   return {
-    students: (data as DbStudent[]).map(mapStudent),
+    students: pageRows.map((row) => mapRawStudent(row, schema)),
     total,
-    page: Math.min(page, totalPages),
+    page: safePage,
     limit,
     total_pages: totalPages,
   };
 }
 
 export async function listStudents(): Promise<StudentRow[]> {
-  const supabase = getSupabaseServerClient();
-  if (!supabase) throw new Error("Supabase не настроен. Проверь .env.local");
-
-  const { data, error } = await supabase
-    .from("students")
-    .select(STUDENT_LIST_COLUMNS)
-    .order("full_name", { ascending: true });
-
-  if (error) throw new Error(error.message);
-  return (data as DbStudent[]).map(mapStudent);
+  const { students } = await listStudentsPage({ page: 1, limit: 10_000 });
+  return students;
 }
 
 export async function createStudent(input: {
@@ -216,10 +227,13 @@ export async function createStudent(input: {
 
   const insertRow: Record<string, unknown> = {
     full_name: fullName,
+    first_name: input.first_name.trim(),
+    last_name: input.last_name.trim(),
     phone: input.phone?.trim() || null,
     student_code: studentCode,
     password_hash: passwordHash,
     status: "active",
+    is_active: true,
   };
   if (input.monthly_fee !== undefined && input.monthly_fee > 0) {
     insertRow.monthly_fee = input.monthly_fee;
@@ -232,25 +246,63 @@ export async function createStudent(input: {
     insertRow.payment_due_day = day;
   }
 
-  const { data, error } = await supabase
-    .from("students")
-    .insert(insertRow)
-    .select(
-      "id, full_name, phone, student_code, status, created_at, start_date, payment_due_day",
-    )
-    .single();
+  let data: RawStudentRow | null = null;
+  let schema: StudentSchemaMode = "modern";
 
-  if (error) {
-    if (error.message.includes("password_hash")) {
+  for (const modern of [true, false]) {
+    const row: Record<string, unknown> = modern
+      ? {
+          full_name: fullName,
+          phone: insertRow.phone,
+          student_code: studentCode,
+          password_hash: passwordHash,
+          status: "active",
+        }
+      : {
+          first_name: input.first_name.trim(),
+          last_name: input.last_name.trim(),
+          phone: insertRow.phone,
+          student_code: studentCode,
+          password_hash: passwordHash,
+          is_active: true,
+        };
+
+    if (insertRow.monthly_fee !== undefined) row.monthly_fee = insertRow.monthly_fee;
+    if (insertRow.start_date) row.start_date = insertRow.start_date;
+    if (insertRow.payment_due_day !== undefined) {
+      row.payment_due_day = insertRow.payment_due_day;
+    }
+
+    const select = modern ? STUDENT_SELECT_MODERN : STUDENT_SELECT_LEGACY;
+    const { data: created, error } = await supabase
+      .from("students")
+      .insert(row)
+      .select(select)
+      .single();
+
+    if (!error && created) {
+      data = created as unknown as RawStudentRow;
+      schema = modern ? "modern" : "legacy";
+      break;
+    }
+
+    const msg = error?.message ?? "";
+    if (error?.message?.includes("password_hash")) {
       throw new Error(
-        "Нужна миграция БД: запусти supabase/MIGRATE_MINIMAL.sql в Supabase SQL Editor",
+        "Нужна миграция БД: запусти supabase/FIX_SCHEMA_CLEAN.sql в Supabase SQL Editor",
       );
     }
-    throw new Error(error.message);
+    if (!isSchemaColumnError(msg) && !msg.includes("Could not find")) {
+      throw new Error(msg);
+    }
+  }
+
+  if (!data) {
+    throw new Error("Не удалось создать ученика. Запусти supabase/FIX_SCHEMA_CLEAN.sql");
   }
 
   return {
-    ...mapStudent(data as DbStudent),
+    ...mapRawStudent(data, schema),
     plain_password: plainPassword,
   };
 }
@@ -264,37 +316,69 @@ export async function resetStudentPassword(
   const plainPassword = generatePassword();
   const passwordHash = bcrypt.hashSync(plainPassword, 10);
 
-  const { data, error } = await supabase
-    .from("students")
-    .update({ password_hash: passwordHash })
-    .eq("id", studentId)
-    .select("student_code, full_name")
-    .single();
+  for (const select of [
+    "student_code, full_name",
+    "student_code, first_name, last_name",
+  ]) {
+    const { data, error } = await supabase
+      .from("students")
+      .update({ password_hash: passwordHash })
+      .eq("id", studentId)
+      .select(select)
+      .single();
 
-  if (error) throw new Error(error.message);
+    if (!error && data) {
+      const row = data as unknown as {
+        student_code: string;
+        full_name?: string;
+        first_name?: string;
+        last_name?: string;
+      };
+      return {
+        student_code: row.student_code,
+        plain_password: plainPassword,
+        full_name:
+          row.full_name ??
+          `${row.last_name ?? ""} ${row.first_name ?? ""}`.trim(),
+      };
+    }
+    if (error && !isSchemaColumnError(error.message)) {
+      throw new Error(error.message);
+    }
+  }
 
-  return {
-    student_code: data.student_code,
-    plain_password: plainPassword,
-    full_name: data.full_name,
-  };
+  throw new Error("Не удалось сбросить пароль");
 }
 
 export async function loginStudent(code: string, password: string) {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");
 
-  const { data, error } = await supabase
-    .from("students")
-    .select("id, full_name, phone, student_code, password_hash, status")
-    .eq("student_code", code.trim().toUpperCase())
-    .eq("status", "active")
-    .maybeSingle();
+  for (const modern of [true, false]) {
+    const select = modern
+      ? "id, full_name, phone, student_code, password_hash, status"
+      : "id, first_name, last_name, phone, student_code, password_hash, is_active";
 
-  if (error) throw new Error(error.message);
-  if (!data?.password_hash || !bcrypt.compareSync(password, data.password_hash)) {
-    return null;
+    let dbQuery = supabase
+      .from("students")
+      .select(select)
+      .eq("student_code", code.trim().toUpperCase());
+
+    dbQuery = modern
+      ? dbQuery.eq("status", "active")
+      : dbQuery.eq("is_active", true);
+
+    const { data, error } = await dbQuery.maybeSingle();
+    if (error && isSchemaColumnError(error.message)) continue;
+    if (error) throw new Error(error.message);
+
+    const row = data as unknown as RawStudentRow & { password_hash?: string };
+    if (!row?.password_hash || !bcrypt.compareSync(password, row.password_hash)) {
+      return null;
+    }
+
+    return mapRawStudent(row, modern ? "modern" : "legacy");
   }
 
-  return mapStudent(data as DbStudent);
+  return null;
 }

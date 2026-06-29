@@ -18,6 +18,15 @@ type Student = {
 };
 
 type StatusFilter = "all" | "active" | "inactive";
+type PaymentFilter = "all" | "paid" | "debt" | "overdue" | "new";
+
+const PAYMENT_FILTERS: { id: PaymentFilter; label: string }[] = [
+  { id: "all", label: "Все" },
+  { id: "debt", label: "Должники" },
+  { id: "overdue", label: "Просрочено" },
+  { id: "paid", label: "Оплачено" },
+  { id: "new", label: "Новые" },
+];
 
 const PAGE_SIZE = 50;
 const SEARCH_DEBOUNCE_MS = 350;
@@ -44,10 +53,12 @@ export default function AdminStudentsPage() {
   });
   const [listFilterTeacher, setListFilterTeacher] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [listLoading, setListLoading] = useState(true);
+  const [listError, setListError] = useState("");
 
   const [teacherId, setTeacherId] = useState("");
   const [fullName, setFullName] = useState("");
@@ -89,26 +100,44 @@ export default function AdminStudentsPage() {
   });
 
   const loadTeachers = useCallback(async () => {
-    const res = await fetch("/api/teachers");
+    const res = await fetch("/api/teachers", { credentials: "include" });
     const data = await res.json();
-    if (res.ok) setTeachers(data.teachers ?? []);
+    if (res.ok) {
+      setTeachers(data.teachers ?? []);
+      return;
+    }
+    if (res.status === 401) {
+      setListError("Нет доступа. Войдите в админку заново.");
+    }
   }, []);
 
   const loadStudents = useCallback(async () => {
     setListLoading(true);
+    setListError("");
     const params = new URLSearchParams({
       page: String(page),
       limit: String(PAGE_SIZE),
       status: statusFilter,
+      payment_filter: paymentFilter,
     });
     if (search.trim()) params.set("search", search.trim());
     if (listFilterTeacher) params.set("teacher_id", listFilterTeacher);
 
-    const res = await fetch(`/api/students?${params}`);
+    const res = await fetch(`/api/students?${params}`, {
+      credentials: "include",
+    });
     const data = await res.json();
     setListLoading(false);
 
-    if (!res.ok) return;
+    if (!res.ok) {
+      setListError(
+        data.error ??
+          (res.status === 401
+            ? "Нет доступа. Войдите в админку заново."
+            : "Не удалось загрузить учеников"),
+      );
+      return;
+    }
 
     setStudents((data.students ?? []).map(mapStudent));
     setPagination(
@@ -120,7 +149,7 @@ export default function AdminStudentsPage() {
       },
     );
     if (data.summary) setSummary(data.summary);
-  }, [page, search, listFilterTeacher, statusFilter]);
+  }, [page, search, listFilterTeacher, statusFilter, paymentFilter]);
 
   useEffect(() => {
     loadTeachers();
@@ -140,7 +169,7 @@ export default function AdminStudentsPage() {
 
   useEffect(() => {
     setPage(1);
-  }, [listFilterTeacher, statusFilter]);
+  }, [listFilterTeacher, statusFilter, paymentFilter]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -224,6 +253,18 @@ export default function AdminStudentsPage() {
             <Link href="/admin/teachers" className="underline">
               /admin/teachers
             </Link>
+          </div>
+        )}
+
+        {listError && (
+          <div className="lc-alert lc-alert-error mb-6">
+            {listError}
+            {listError.includes("column") && (
+              <p className="mt-2 text-sm">
+                Запустите <code className="rounded bg-red-100 px-1">supabase/FIX_SCHEMA_CLEAN.sql</code>{" "}
+                в Supabase SQL Editor
+              </p>
+            )}
           </div>
         )}
 
@@ -362,6 +403,26 @@ export default function AdminStudentsPage() {
               className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
                 statusFilter === f.id
                   ? "bg-emerald-600 text-white"
+                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="mb-4 flex flex-wrap gap-2">
+          <span className="self-center text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Оплата:
+          </span>
+          {PAYMENT_FILTERS.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => setPaymentFilter(f.id)}
+              className={`rounded-full px-3 py-1.5 text-xs font-semibold transition ${
+                paymentFilter === f.id
+                  ? "bg-indigo-600 text-white"
                   : "bg-slate-100 text-slate-700 hover:bg-slate-200"
               }`}
             >
