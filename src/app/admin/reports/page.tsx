@@ -19,6 +19,15 @@ type Payment = {
   has_invoice: boolean;
 };
 
+type TeacherPayroll = {
+  teacher_id: string;
+  teacher_name: string;
+  teacher_code: string;
+  student_count: number;
+  course_total: number;
+  salary: number;
+};
+
 type MonthSummary = {
   total_students: number;
   active_students: number;
@@ -31,6 +40,8 @@ type MonthSummary = {
   overdue_count: number;
   new_count: number;
   billing_count: number;
+  teacher_payroll_total: number;
+  net_profit_after_payroll: number;
 };
 
 type DaySummary = {
@@ -40,6 +51,8 @@ type DaySummary = {
   due_today_count: number;
   due_today_unpaid_total: number;
   due_today_unpaid_count: number;
+  teacher_payroll_total: number;
+  net_profit_after_payroll: number;
 };
 
 type DailyBreakdown = {
@@ -105,6 +118,61 @@ function secondsAgo(iso: string) {
   return `${mins} мин назад`;
 }
 
+function TeacherPayrollBlock({
+  rows,
+  total,
+  subtitle,
+}: {
+  rows: TeacherPayroll[];
+  total: number;
+  subtitle: string;
+}) {
+  if (!rows.length) {
+    return (
+      <div className="lc-card mb-8 overflow-hidden">
+        <div className="border-b border-slate-100 px-5 py-4">
+          <h2 className="font-bold text-slate-900">Зарплата учителей</h2>
+          <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+        </div>
+        <p className="p-6 text-center text-slate-500">
+          Нет учеников с назначенными учителями
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="lc-card mb-8 overflow-hidden">
+      <div className="border-b border-slate-100 px-5 py-4">
+        <h2 className="font-bold text-slate-900">Зарплата учителей (50%)</h2>
+        <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+        <p className="mt-2 text-lg font-bold text-amber-700">
+          Итого ЗП: {formatMoney(total)}
+        </p>
+      </div>
+      <ul className="divide-y divide-slate-100">
+        {rows.map((row) => (
+          <li
+            key={row.teacher_id}
+            className="flex flex-wrap items-center justify-between gap-3 px-5 py-4"
+          >
+            <div>
+              <p className="font-semibold text-slate-900">{row.teacher_name}</p>
+              <p className="font-mono text-xs text-indigo-600">{row.teacher_code}</p>
+              <p className="mt-1 text-sm text-slate-500">
+                {row.student_count} учеников · курсы {formatMoney(row.course_total)}
+              </p>
+            </div>
+            <p className="text-lg font-bold text-amber-700">
+              {formatMoney(row.salary)}
+            </p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export default function OwnerReportsPage() {
   const now = new Date();
   const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
@@ -118,6 +186,7 @@ export default function OwnerReportsPage() {
   const [daySummary, setDaySummary] = useState<DaySummary | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [dailyBreakdown, setDailyBreakdown] = useState<DailyBreakdown[]>([]);
+  const [teacherPayroll, setTeacherPayroll] = useState<TeacherPayroll[]>([]);
   const [pagination, setPagination] = useState({
     total: 0,
     page: 1,
@@ -158,6 +227,7 @@ export default function OwnerReportsPage() {
       }
 
       setDaySummary(data.summary);
+      setTeacherPayroll(data.teacher_payroll ?? []);
       setPayments(data.payments ?? []);
       setPagination(
         data.pagination ?? {
@@ -184,6 +254,7 @@ export default function OwnerReportsPage() {
       return;
     }
     setMonthSummary(data.summary);
+    setTeacherPayroll(data.teacher_payroll ?? []);
     setLastUpdated(data.updated_at ?? new Date().toISOString());
   }, [month]);
 
@@ -210,6 +281,7 @@ export default function OwnerReportsPage() {
       }
 
       setMonthSummary(data.summary);
+      setTeacherPayroll(data.teacher_payroll ?? []);
       setPayments(data.payments ?? []);
       setDailyBreakdown(data.daily_breakdown ?? []);
       setPagination(
@@ -451,7 +523,7 @@ export default function OwnerReportsPage() {
             День: {formatDateRu(day)}
           </p>
 
-          <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="lc-card border-emerald-100 bg-gradient-to-br from-emerald-50 to-white p-5">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Получено за день
@@ -462,6 +534,26 @@ export default function OwnerReportsPage() {
               <p className="mt-1 text-xs text-slate-500">
                 {daySummary.received_count} платежей
               </p>
+            </div>
+
+            <div className="lc-card border-amber-100 bg-gradient-to-br from-amber-50 to-white p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                ЗП учителей (50%)
+              </p>
+              <p className="mt-2 text-2xl font-bold text-amber-700">
+                {formatMoney(daySummary.teacher_payroll_total)}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">от курса / оплаты за день</p>
+            </div>
+
+            <div className="lc-card border-violet-100 bg-gradient-to-br from-violet-50 to-white p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                Чистая прибыль
+              </p>
+              <p className="mt-2 text-2xl font-bold text-violet-700">
+                {formatMoney(daySummary.net_profit_after_payroll)}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">после ЗП учителей</p>
             </div>
 
             <div className="lc-card border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5">
@@ -487,17 +579,17 @@ export default function OwnerReportsPage() {
                 долг {formatMoney(daySummary.due_today_unpaid_total)}
               </p>
             </div>
-
-            <div className="lc-card border-violet-100 bg-gradient-to-br from-violet-50 to-white p-5">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Итого за день
-              </p>
-              <p className="mt-2 text-2xl font-bold text-violet-700">
-                {formatMoney(daySummary.received_total)}
-              </p>
-              <p className="mt-1 text-xs text-slate-500">прибыль за день</p>
-            </div>
           </div>
+
+          <TeacherPayrollBlock
+            rows={teacherPayroll}
+            total={daySummary.teacher_payroll_total}
+            subtitle={
+              daySection === "received"
+                ? "50% от суммы, полученной в этот день"
+                : "50% от стоимости курса у учеников со сроком сегодня"
+            }
+          />
 
           <div className="lc-card overflow-hidden">
             <div className="border-b border-slate-100 px-5 py-4">
@@ -656,7 +748,7 @@ export default function OwnerReportsPage() {
             )}
           </p>
 
-          <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <div className="lc-card border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Учеников в отчёте
@@ -690,15 +782,31 @@ export default function OwnerReportsPage() {
                 {monthSummary.debt_count} учеников
               </p>
             </div>
+            <div className="lc-card border-amber-100 bg-gradient-to-br from-amber-50 to-white p-5">
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                ЗП учителей (50%)
+              </p>
+              <p className="mt-2 text-2xl font-bold text-amber-700">
+                {formatMoney(monthSummary.teacher_payroll_total)}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">50% от стоимости курса</p>
+            </div>
             <div className="lc-card border-violet-100 bg-gradient-to-br from-violet-50 to-white p-5">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Прибыль за месяц
+                Чистая прибыль
               </p>
               <p className="mt-2 text-2xl font-bold text-violet-700">
-                {formatMoney(monthSummary.profit)}
+                {formatMoney(monthSummary.net_profit_after_payroll)}
               </p>
+              <p className="mt-1 text-xs text-slate-500">получено минус ЗП</p>
             </div>
           </div>
+
+          <TeacherPayrollBlock
+            rows={teacherPayroll}
+            total={monthSummary.teacher_payroll_total}
+            subtitle="50% от стоимости курса каждого ученика, по назначенному учителю"
+          />
 
           {dailyBreakdown.length > 0 && (
             <div className="lc-card mb-8 overflow-hidden">

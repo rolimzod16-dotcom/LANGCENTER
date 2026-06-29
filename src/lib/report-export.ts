@@ -11,6 +11,14 @@ import {
   type PaymentListFilter,
   type StudentPayment,
 } from "@/lib/payments";
+import {
+  buildTeacherPayrollReport,
+  getTeacherAssignmentsByStudentIds,
+  studentPayrollAmount,
+  TEACHER_SALARY_RATE,
+  type PayrollBasis,
+  type TeacherPayrollRow,
+} from "@/lib/teacher-payroll";
 
 const FILTER_LABELS: Record<PaymentListFilter, string> = {
   all: "Все",
@@ -25,18 +33,29 @@ const SECTION_LABELS: Record<DailyReportSection, string> = {
   due: "Срок оплаты в этот день",
 };
 
-const COLUMNS = [
+const PAYMENT_COLUMNS = [
   "№",
   "ФИО",
   "Код",
+  "Учитель",
   "Статус",
   "К оплате (сум)",
   "Оплачено (сум)",
   "Долг (сум)",
+  "ЗП учителя (50%)",
   "Срок оплаты",
   "Дата получения",
   "Дата начала",
   "Счёт выставлен",
+];
+
+const PAYROLL_COLUMNS = [
+  "№",
+  "Учитель",
+  "Код учителя",
+  "Учеников",
+  "Сумма курсов (сум)",
+  "ЗП 50% (сум)",
 ];
 
 function formatDateRu(iso: string | null | undefined): string {
@@ -65,25 +84,6 @@ function statusLabel(payment: StudentPayment): string {
   return labels[payment.status] ?? payment.status;
 }
 
-function paymentRows(payments: StudentPayment[]): Array<Array<string | number>> {
-  return payments.map((p, index) => {
-    const debt = Math.max(0, p.amount_due - p.amount_paid);
-    return [
-      index + 1,
-      p.student_name,
-      p.student_code,
-      statusLabel(p),
-      Math.round(p.amount_due),
-      Math.round(p.amount_paid),
-      Math.round(debt),
-      formatDateRu(p.due_date),
-      formatDateRu(p.paid_at),
-      formatDateRu(p.start_date),
-      p.has_invoice ? "Да" : "Нет",
-    ];
-  });
-}
-
 function escapeXml(value: string | number): string {
   return String(value)
     .replace(/&/g, "&amp;")
@@ -107,6 +107,21 @@ function row(cells: string): string {
 
 function summaryRow(label: string, value: string | number): string {
   return row(`${cell(label, "String", "Label")}${cell(value)}`);
+}
+
+function headerRow(columns: string[]): string {
+  return row(columns.map((title) => cell(title, "String", "Header")).join(""));
+}
+
+function moneyCells(values: Array<string | number>, startMoneyIndex: number) {
+  return values
+    .map((value, index) => {
+      if (typeof value === "number" && index >= startMoneyIndex) {
+        return cell(value, "Number", "Money");
+      }
+      return cell(value);
+    })
+    .join("");
 }
 
 function buildExcelXml(sheetName: string, tableRows: string): string {
@@ -143,10 +158,12 @@ function buildExcelXml(sheetName: string, tableRows: string): string {
 <Column ss:Width="40"/>
 <Column ss:Width="180"/>
 <Column ss:Width="120"/>
+<Column ss:Width="150"/>
 <Column ss:Width="90"/>
 <Column ss:Width="110"/>
 <Column ss:Width="110"/>
 <Column ss:Width="90"/>
+<Column ss:Width="110"/>
 <Column ss:Width="95"/>
 <Column ss:Width="95"/>
 <Column ss:Width="95"/>
@@ -157,33 +174,102 @@ ${tableRows}
 </Workbook>`;
 }
 
-function buildTableSection(
+function payrollSection(
+  teachers: TeacherPayrollRow[],
+  totalPayroll: number,
+): string {
+  const parts = [
+    row(cell("Зарплата учителей (50% от курса)", "String", "Title")),
+    summaryRow("Всего ЗП (сум)", Math.round(totalPayroll)),
+    "<Row></Row>",
+    headerRow(PAYROLL_COLUMNS),
+  ];
+
+  teachers.forEach((teacher, index) => {
+    parts.push(
+      row(
+        moneyCells(
+          [
+            index + 1,
+            teacher.teacher_name,
+            teacher.teacher_code,
+            teacher.student_count,
+            teacher.course_total,
+            teacher.salary,
+          ],
+          4,
+        ),
+      ),
+    );
+  });
+
+  return parts.join("\n");
+}
+
+async function paymentRows(
+  payments: StudentPayment[],
+  basis: PayrollBasis,
+): Promise<Array<Array<string | number>>> {
+  const assignments = await getTeacherAssignmentsByStudentIds(
+    payments.map((p) => p.student_id),
+  );
+
+  return payments.map((p, index) => {
+    const debt = Math.max(0, p.amount_due - p.amount_paid);
+    const teacher = assignments.get(p.student_id);
+    return [
+      index + 1,
+      p.student_name,
+      p.student_code,
+      teacher?.teacher_name ?? "Без учителя",
+      statusLabel(p),
+      Math.round(p.amount_due),
+      Math.round(p.amount_paid),
+      Math.round(debt),
+      studentPayrollAmount(p, basis),
+      formatDateRu(p.due_date),
+      formatDateRu(p.paid_at),
+      formatDateRu(p.start_date),
+      p.has_invoice ? "Да" : "Нет",
+    ];
+  });
+}
+
+async function buildReportBody(
   title: string,
   summaryLines: Array<[string, string | number]>,
   payments: StudentPayment[],
-): string {
+  basis: PayrollBasis,
+  incomeForNet: number,
+): Promise<string> {
+  const payroll = await buildTeacherPayrollReport(
+    payments,
+    basis,
+    incomeForNet,
+  );
+  const rows = await paymentRows(payments, basis);
   const parts: string[] = [];
 
   parts.push(row(cell(title, "String", "Title")));
   for (const [label, value] of summaryLines) {
     parts.push(summaryRow(label, value));
   }
-  parts.push("<Row></Row>");
   parts.push(
-    row(COLUMNS.map((title) => cell(title, "String", "Header")).join("")),
+    summaryRow("ЗП учителей (сум)", Math.round(payroll.total_payroll)),
+    summaryRow("Чистая прибыль (сум)", Math.round(payroll.net_after_payroll)),
+    summaryRow(
+      "Ставка ЗП",
+      `${Math.round(TEACHER_SALARY_RATE * 100)}% от курса`,
+    ),
   );
+  parts.push("<Row></Row>");
+  parts.push(headerRow(PAYMENT_COLUMNS));
 
-  for (const dataRow of paymentRows(payments)) {
-    const cells = dataRow
-      .map((value, index) => {
-        if (index >= 4 && index <= 6) {
-          return cell(value, "Number", "Money");
-        }
-        return cell(value);
-      })
-      .join("");
-    parts.push(row(cells));
+  for (const dataRow of rows) {
+    parts.push(row(moneyCells(dataRow, 5)));
   }
+
+  parts.push("<Row></Row>", payrollSection(payroll.teachers, payroll.total_payroll));
 
   return parts.join("\n");
 }
@@ -199,7 +285,7 @@ export async function buildMonthReportExcel(input: {
   );
   const summary = summarizeOwnerPayments(payments);
 
-  const tableRows = buildTableSection(
+  const tableRows = await buildReportBody(
     "Lang Center — отчёт владельца",
     [
       ["Период", monthLabel(input.periodMonth)],
@@ -211,6 +297,8 @@ export async function buildMonthReportExcel(input: {
       ["Долг (сум)", Math.round(summary.total_debt)],
     ],
     payments,
+    "course",
+    summary.total_income,
   );
 
   const filename = `lang-center-${input.periodMonth.slice(0, 7)}-${input.filter}.xls`;
@@ -242,12 +330,17 @@ export async function buildDayReportExcel(input: {
     ["Записей", payments.length],
   ];
 
+  let basis: PayrollBasis = "course";
+  let incomeForNet = 0;
+
   if (input.section === "received") {
     const receivedSummary = summarizeDailyReceived(payments);
     summaryLines.push(
       ["Получено (сум)", Math.round(receivedSummary.received_total)],
       ["Платежей", receivedSummary.received_count],
     );
+    basis = "paid";
+    incomeForNet = receivedSummary.received_total;
   } else {
     const dueSummary = summarizeDailyDue(payments);
     summaryLines.push(
@@ -263,7 +356,13 @@ export async function buildDayReportExcel(input: {
   return {
     content: buildExcelXml(
       "Отчёт",
-      buildTableSection("Lang Center — отчёт за день", summaryLines, payments),
+      await buildReportBody(
+        "Lang Center — отчёт за день",
+        summaryLines,
+        payments,
+        basis,
+        incomeForNet,
+      ),
     ),
     filename,
   };

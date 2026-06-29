@@ -15,6 +15,10 @@ import {
   type PaymentListFilter,
   type StudentPayment,
 } from "@/lib/payments";
+import {
+  buildTeacherPayrollReport,
+  type TeacherPayrollRow,
+} from "@/lib/teacher-payroll";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export type OwnerReportSummary = {
@@ -32,7 +36,10 @@ export type OwnerReportSummary = {
     overdue_count: number;
     new_count: number;
     billing_count: number;
+    teacher_payroll_total: number;
+    net_profit_after_payroll: number;
   };
+  teacher_payroll: TeacherPayrollRow[];
 };
 
 export type OwnerReportList = OwnerReportSummary & {
@@ -57,8 +64,11 @@ export type OwnerDailyReport = {
     due_today_count: number;
     due_today_unpaid_total: number;
     due_today_unpaid_count: number;
+    teacher_payroll_total: number;
+    net_profit_after_payroll: number;
   };
   section: DailyReportSection;
+  teacher_payroll: TeacherPayrollRow[];
   payments: StudentPayment[];
   pagination: {
     total: number;
@@ -87,6 +97,20 @@ async function studentCounts() {
   };
 }
 
+async function monthPayroll(payments: StudentPayment[]) {
+  const paymentSummary = summarizeOwnerPayments(payments);
+  const payroll = await buildTeacherPayrollReport(
+    payments,
+    "course",
+    paymentSummary.total_income,
+  );
+  return {
+    teacher_payroll_total: payroll.total_payroll,
+    net_profit_after_payroll: payroll.net_after_payroll,
+    teacher_payroll: payroll.teachers,
+  };
+}
+
 export async function getOwnerReportSummary(
   periodMonth = currentPeriodMonth(),
 ): Promise<OwnerReportSummary> {
@@ -94,14 +118,19 @@ export async function getOwnerReportSummary(
     studentCounts(),
     getOwnerPaymentsForMonth(periodMonth),
   ]);
+  const paymentSummary = summarizeOwnerPayments(payments);
+  const payroll = await monthPayroll(payments);
 
   return {
     period_month: periodMonth,
     updated_at: new Date().toISOString(),
     summary: {
       ...counts,
-      ...summarizeOwnerPayments(payments),
+      ...paymentSummary,
+      teacher_payroll_total: payroll.teacher_payroll_total,
+      net_profit_after_payroll: payroll.net_profit_after_payroll,
     },
+    teacher_payroll: payroll.teacher_payroll,
   };
 }
 
@@ -114,6 +143,7 @@ export async function getOwnerReportList(
     getOwnerPaymentsForMonth(periodMonth),
   ]);
   const paymentSummary = summarizeOwnerPayments(payments);
+  const payroll = await monthPayroll(payments);
   const page = paginateOwnerPayments(payments, options);
 
   return {
@@ -122,7 +152,10 @@ export async function getOwnerReportList(
     summary: {
       ...counts,
       ...paymentSummary,
+      teacher_payroll_total: payroll.teacher_payroll_total,
+      net_profit_after_payroll: payroll.net_profit_after_payroll,
     },
+    teacher_payroll: payroll.teacher_payroll,
     payments: page.items,
     daily_breakdown: getMonthDailyBreakdown(payments),
     pagination: {
@@ -146,16 +179,25 @@ export async function getOwnerDailyReport(
 
   const source = section === "received" ? received : due;
   const page = paginateOwnerPayments(source, options);
+  const receivedSummary = summarizeDailyReceived(received);
+  const payroll = await buildTeacherPayrollReport(
+    source,
+    section === "received" ? "paid" : "course",
+    section === "received" ? receivedSummary.received_total : 0,
+  );
 
   return {
     view: "day",
     date,
     updated_at: new Date().toISOString(),
     summary: {
-      ...summarizeDailyReceived(received),
+      ...receivedSummary,
       ...summarizeDailyDue(due),
+      teacher_payroll_total: payroll.total_payroll,
+      net_profit_after_payroll: payroll.net_after_payroll,
     },
     section,
+    teacher_payroll: payroll.teachers,
     payments: page.items,
     pagination: {
       total: page.total,
