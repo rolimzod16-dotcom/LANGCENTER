@@ -1,9 +1,46 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { ApkDownloadButton } from "@/components/mobile/ApkDownloadButton";
 import { InstallBanner } from "@/components/mobile/InstallBanner";
 import { Logo } from "@/components/ui/Logo";
 
+type SessionHint = "teacher" | "student" | null;
+
 export default function MobileAppPage() {
+  const router = useRouter();
+  const [session, setSession] = useState<SessionHint>(null);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      fetch("/api/teacher/me", { credentials: "same-origin" }),
+      fetch("/api/student/me", { credentials: "same-origin" }),
+    ]).then(async ([teacherRes, studentRes]) => {
+      if (teacherRes.ok) {
+        setSession("teacher");
+        router.replace("/teacher/dashboard");
+        return;
+      }
+      if (studentRes.ok) {
+        setSession("student");
+        router.replace("/student/dashboard");
+        return;
+      }
+      setChecking(false);
+    });
+  }, [router]);
+
+  if (checking) {
+    return (
+      <div className="lc-page safe-top safe-bottom flex min-h-dvh items-center justify-center">
+        <p className="text-slate-500">Загрузка…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="lc-page safe-top safe-bottom flex min-h-dvh flex-col">
       <main className="mx-auto flex w-full max-w-lg flex-1 flex-col px-4 py-8">
@@ -33,7 +70,7 @@ export default function MobileAppPage() {
         </div>
 
         <p className="mt-8 text-center text-xs font-semibold uppercase tracking-widest text-slate-400">
-          Войти в браузере
+          Войти
         </p>
 
         <div className="mt-4 space-y-3">
@@ -62,14 +99,17 @@ export default function MobileAppPage() {
             <div>
               <p className="font-bold text-slate-900">Я ученик</p>
               <p className="text-sm text-slate-500">
-                Оценки, посещаемость, учителя
+                Оплата, оценки, посещаемость
               </p>
             </div>
           </Link>
         </div>
 
         <p className="mt-auto pt-10 text-center text-xs text-slate-400">
-          Админ-панель доступна только с компьютера
+          Админ-панель:{" "}
+          <Link href="/admin/login" className="font-medium text-violet-600">
+            вход владельца
+          </Link>
         </p>
       </main>
     </div>

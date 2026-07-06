@@ -34,6 +34,33 @@ export async function markAttendance(input: {
   return data;
 }
 
+export async function getTodayAttendanceForTeacher(
+  teacherId: string,
+  studentIds: string[],
+): Promise<Record<string, AttendanceStatus>> {
+  const map: Record<string, AttendanceStatus> = {};
+  if (!studentIds.length) return map;
+
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return map;
+
+  const lessonDate = new Date().toISOString().slice(0, 10);
+  const { data, error } = await supabase
+    .from("attendance")
+    .select("student_id, status")
+    .eq("teacher_id", teacherId)
+    .eq("lesson_date", lessonDate)
+    .in("student_id", studentIds);
+
+  if (error) return map;
+
+  for (const row of data ?? []) {
+    map[row.student_id] = row.status as AttendanceStatus;
+  }
+
+  return map;
+}
+
 export async function getStudentAttendance(studentId: string) {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");

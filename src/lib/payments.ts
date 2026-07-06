@@ -550,3 +550,23 @@ export function todayIso(): string {
 export function formatMoney(amount: number): string {
   return new Intl.NumberFormat("ru-RU").format(Math.round(amount)) + " сум";
 }
+
+export async function getStudentPaymentStatus(
+  studentId: string,
+  periodMonth = currentPeriodMonth(),
+) {
+  const payments = await buildOwnerPaymentsForMonth(periodMonth);
+  const payment = payments.find((p) => p.student_id === studentId);
+  if (!payment) return null;
+
+  const debt = Math.max(0, payment.amount_due - payment.amount_paid);
+  return {
+    amount_due: payment.amount_due,
+    amount_paid: payment.amount_paid,
+    due_date: payment.due_date,
+    status: payment.status,
+    debt,
+    has_invoice: payment.has_invoice,
+    period_month: payment.period_month,
+  };
+}

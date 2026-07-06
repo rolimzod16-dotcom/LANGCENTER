@@ -12,6 +12,12 @@ export function CredentialsCard({ title, code, password, onClose }: Props) {
     navigator.clipboard.writeText(text);
   };
 
+  const copyAll = () => {
+    navigator.clipboard.writeText(
+      `Код: ${code}\nПароль: ${password}`,
+    );
+  };
+
   return (
     <div className="lc-card mb-6 border-2 border-emerald-300 bg-gradient-to-br from-emerald-50 to-white p-5">
       <p className="font-bold text-emerald-900">{title}</p>
@@ -50,13 +56,22 @@ export function CredentialsCard({ title, code, password, onClose }: Props) {
       <p className="mt-4 text-sm text-emerald-800">
         Сохраните данные и передайте пользователю. Пароль больше не отобразится.
       </p>
-      <button
-        type="button"
-        onClick={onClose}
-        className="lc-btn lc-btn-ghost mt-4 px-4 py-2 text-sm"
-      >
-        Закрыть
-      </button>
+      <div className="mt-4 flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={copyAll}
+          className="lc-btn lc-btn-primary px-4 py-2 text-sm"
+        >
+          Копировать всё
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="lc-btn lc-btn-ghost px-4 py-2 text-sm"
+        >
+          Закрыть
+        </button>
+      </div>
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MobileShell } from "@/components/mobile/MobileShell";
 
@@ -10,11 +10,19 @@ type Student = {
   student_code: string;
 };
 
+type AttendanceStatus = "present" | "absent" | "late";
+
 const TABS = [
   { id: "students", label: "Ученики", icon: "👥" },
   { id: "grades", label: "Оценки", icon: "📝" },
   { id: "profile", label: "Профиль", icon: "👤" },
 ];
+
+const STATUS_LABELS: Record<AttendanceStatus, string> = {
+  present: "✅ Пришёл",
+  late: "⏰ Опоздал",
+  absent: "❌ Нет",
+};
 
 export default function TeacherDashboardPage() {
   const router = useRouter();
@@ -24,6 +32,12 @@ export default function TeacherDashboardPage() {
     teacher_code: string;
   } | null>(null);
   const [students, setStudents] = useState<Student[]>([]);
+  const [todayAttendance, setTodayAttendance] = useState<
+    Record<string, AttendanceStatus>
+  >({});
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [markingAll, setMarkingAll] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [gradeForm, setGradeForm] = useState({
@@ -34,15 +48,18 @@ export default function TeacherDashboardPage() {
   });
 
   async function load() {
-    const res = await fetch("/api/teacher/me");
+    setLoading(true);
+    const res = await fetch("/api/teacher/me", { credentials: "same-origin" });
     const data = await res.json();
+    setLoading(false);
     if (!res.ok) {
       router.push("/teacher/login");
       return;
     }
     setTeacher(data.teacher);
-    setStudents(data.students);
-    if (data.students[0] && !gradeForm.student_id) {
+    setStudents(data.students ?? []);
+    setTodayAttendance(data.today_attendance ?? {});
+    if (data.students?.[0] && !gradeForm.student_id) {
       setGradeForm((f) => ({ ...f, student_id: data.students[0].id }));
     }
   }
@@ -51,15 +68,28 @@ export default function TeacherDashboardPage() {
     load();
   }, []);
 
+  const filteredStudents = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return students;
+    return students.filter(
+      (s) =>
+        s.full_name.toLowerCase().includes(q) ||
+        s.student_code.toLowerCase().includes(q),
+    );
+  }, [students, search]);
+
+  const markedToday = students.filter((s) => todayAttendance[s.id]).length;
+
   async function mark(
     studentId: string,
-    status: "present" | "absent" | "late",
+    status: AttendanceStatus,
   ) {
     setError("");
     setSuccess("");
     const res = await fetch("/api/attendance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify({ student_id: studentId, status }),
     });
     const data = await res.json();
@@ -67,8 +97,28 @@ export default function TeacherDashboardPage() {
       setError(data.error ?? "Ошибка");
       return;
     }
+    setTodayAttendance((prev) => ({ ...prev, [studentId]: status }));
     const labels = { present: "Пришёл", late: "Опоздал", absent: "Нет" };
     setSuccess(`Отмечено: ${labels[status]}`);
+  }
+
+  async function markAllPresent() {
+    if (!students.length) return;
+    setMarkingAll(true);
+    setError("");
+    setSuccess("");
+    for (const student of students) {
+      if (todayAttendance[student.id] === "present") continue;
+      await fetch("/api/attendance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ student_id: student.id, status: "present" }),
+      });
+      setTodayAttendance((prev) => ({ ...prev, [student.id]: "present" }));
+    }
+    setMarkingAll(false);
+    setSuccess("Все отмечены как пришли");
   }
 
   async function submitGrade(e: React.FormEvent) {
@@ -78,6 +128,7 @@ export default function TeacherDashboardPage() {
     const res = await fetch("/api/grades", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
       body: JSON.stringify({
         ...gradeForm,
         score: Number(gradeForm.score),
@@ -106,58 +157,110 @@ export default function TeacherDashboardPage() {
       tabs={TABS}
       activeTab={tab}
       onTabChange={setTab}
+      onRefresh={load}
+      refreshing={loading}
     >
       {error && <p className="lc-alert lc-alert-error mb-4">{error}</p>}
       {success && <p className="lc-alert lc-alert-success mb-4">{success}</p>}
 
       {tab === "students" && (
         <section>
-          <h2 className="text-lg font-bold text-slate-900">
-            Мои ученики ({students.length})
-          </h2>
-          <p className="mt-1 text-sm text-slate-500">
-            Нажмите кнопку — отметка за сегодня
-          </p>
-          {students.length === 0 ? (
-            <p className="lc-card-flat mt-6 p-4 text-center text-sm text-slate-500">
-              Пока нет учеников. Админ добавит их в панели управления.
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-slate-900">
+                Мои ученики ({students.length})
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Отмечено сегодня: {markedToday} из {students.length}
+              </p>
+            </div>
+            {students.length > 0 && (
+              <button
+                type="button"
+                onClick={markAllPresent}
+                disabled={markingAll}
+                className="lc-btn lc-btn-primary px-3 py-2 text-xs disabled:opacity-50"
+              >
+                {markingAll ? "Отмечаю…" : "Все пришли"}
+              </button>
+            )}
+          </div>
+
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Поиск по имени или коду…"
+            className="lc-input mb-4"
+          />
+
+          {loading && students.length === 0 ? (
+            <p className="lc-card-flat p-4 text-center text-sm text-slate-500">
+              Загрузка…
+            </p>
+          ) : filteredStudents.length === 0 ? (
+            <p className="lc-card-flat p-4 text-center text-sm text-slate-500">
+              {students.length === 0
+                ? "Пока нет учеников. Админ добавит их в панели."
+                : "Ничего не найдено"}
             </p>
           ) : (
-            <ul className="mt-4 space-y-3">
-              {students.map((s) => (
-                <li
-                  key={s.id}
-                  className="lc-card p-4"
-                >
-                  <p className="font-bold text-slate-900">{s.full_name}</p>
-                  <p className="font-mono text-sm text-indigo-600">
-                    {s.student_code}
-                  </p>
-                  <div className="mt-4 grid grid-cols-3 gap-2">
-                    <button
-                      type="button"
-                      onClick={() => mark(s.id, "present")}
-                      className="lc-btn rounded-xl bg-emerald-100 py-3 text-sm font-semibold text-emerald-800"
-                    >
-                      ✅ Пришёл
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => mark(s.id, "late")}
-                      className="lc-btn rounded-xl bg-amber-100 py-3 text-sm font-semibold text-amber-800"
-                    >
-                      ⏰ Опоздал
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => mark(s.id, "absent")}
-                      className="lc-btn rounded-xl bg-red-100 py-3 text-sm font-semibold text-red-800"
-                    >
-                      ❌ Нет
-                    </button>
-                  </div>
-                </li>
-              ))}
+            <ul className="space-y-3">
+              {filteredStudents.map((s) => {
+                const todayStatus = todayAttendance[s.id];
+                return (
+                  <li key={s.id} className="lc-card p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="font-bold text-slate-900">{s.full_name}</p>
+                        <p className="font-mono text-sm text-indigo-600">
+                          {s.student_code}
+                        </p>
+                      </div>
+                      {todayStatus && (
+                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+                          {STATUS_LABELS[todayStatus]}
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-4 grid grid-cols-3 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => mark(s.id, "present")}
+                        className={`lc-btn rounded-xl py-3 text-sm font-semibold ${
+                          todayStatus === "present"
+                            ? "bg-emerald-600 text-white"
+                            : "bg-emerald-100 text-emerald-800"
+                        }`}
+                      >
+                        ✅ Пришёл
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => mark(s.id, "late")}
+                        className={`lc-btn rounded-xl py-3 text-sm font-semibold ${
+                          todayStatus === "late"
+                            ? "bg-amber-600 text-white"
+                            : "bg-amber-100 text-amber-800"
+                        }`}
+                      >
+                        ⏰ Опоздал
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => mark(s.id, "absent")}
+                        className={`lc-btn rounded-xl py-3 text-sm font-semibold ${
+                          todayStatus === "absent"
+                            ? "bg-red-600 text-white"
+                            : "bg-red-100 text-red-800"
+                        }`}
+                      >
+                        ❌ Нет
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>

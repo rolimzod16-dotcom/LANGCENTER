@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getTodayAttendanceForTeacher } from "@/lib/attendance";
 import { getSession } from "@/lib/auth/session";
 import { getTeacherStudents } from "@/lib/groups";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
@@ -18,7 +19,12 @@ export async function GET() {
       .single();
 
     const students = await getTeacherStudents(session.id);
-    return NextResponse.json({ teacher, students });
+    const today_attendance = await getTodayAttendanceForTeacher(
+      session.id,
+      students.map((s) => s.id),
+    );
+
+    return NextResponse.json({ teacher, students, today_attendance });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ошибка";
     return NextResponse.json({ error: message }, { status: 500 });

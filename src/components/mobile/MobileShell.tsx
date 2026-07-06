@@ -14,6 +14,8 @@ type Props = {
   tabs?: Tab[];
   activeTab?: string;
   onTabChange?: (id: string) => void;
+  onRefresh?: () => void;
+  refreshing?: boolean;
   children: React.ReactNode;
 };
 
@@ -23,6 +25,8 @@ export function MobileShell({
   tabs,
   activeTab,
   onTabChange,
+  onRefresh,
+  refreshing = false,
   children,
 }: Props) {
   return (
@@ -38,6 +42,17 @@ export function MobileShell({
               <p className="truncate text-xs text-slate-500">{subtitle}</p>
             )}
           </div>
+          {onRefresh && (
+            <button
+              type="button"
+              onClick={onRefresh}
+              disabled={refreshing}
+              className="lc-btn rounded-xl px-3 py-2 text-xs font-semibold disabled:opacity-50"
+              aria-label="Обновить"
+            >
+              {refreshing ? "…" : "↻"}
+            </button>
+          )}
         </div>
       </header>
 

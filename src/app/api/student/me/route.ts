@@ -3,6 +3,7 @@ import { getSession } from "@/lib/auth/session";
 import { getStudentAttendance } from "@/lib/attendance";
 import { getStudentGrades } from "@/lib/grades";
 import { getStudentTeachers } from "@/lib/groups";
+import { getStudentPaymentStatus } from "@/lib/payments";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
 export async function GET() {
@@ -19,13 +20,14 @@ export async function GET() {
       .eq("id", session.id)
       .single();
 
-    const [teachers, grades, attendance] = await Promise.all([
+    const [teachers, grades, attendance, payment] = await Promise.all([
       getStudentTeachers(session.id),
       getStudentGrades(session.id),
       getStudentAttendance(session.id),
+      getStudentPaymentStatus(session.id),
     ]);
 
-    return NextResponse.json({ student, teachers, grades, attendance });
+    return NextResponse.json({ student, teachers, grades, attendance, payment });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ошибка";
     return NextResponse.json({ error: message }, { status: 500 });

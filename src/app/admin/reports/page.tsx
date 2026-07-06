@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { AdminSubLayout } from "@/components/layout/AdminSubLayout";
 import { formatMoney } from "@/lib/payments";
 
@@ -173,7 +174,8 @@ function TeacherPayrollBlock({
   );
 }
 
-export default function OwnerReportsPage() {
+function OwnerReportsPage() {
+  const searchParams = useSearchParams();
   const now = new Date();
   const defaultMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
 
@@ -305,6 +307,17 @@ export default function OwnerReportsPage() {
     },
     [viewMode, loadDay, loadMonthList],
   );
+
+  useEffect(() => {
+    const filterParam = searchParams.get("filter");
+    if (
+      filterParam &&
+      MONTH_FILTERS.some((item) => item.id === filterParam)
+    ) {
+      setFilter(filterParam as MonthFilter);
+      setViewMode("month");
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (viewMode === "day") loadDay();
@@ -969,5 +982,13 @@ export default function OwnerReportsPage() {
         </>
       )}
     </AdminSubLayout>
+  );
+}
+
+export default function OwnerReportsPageWithSuspense() {
+  return (
+    <Suspense fallback={<p className="p-8 text-slate-500">Загрузка отчёта…</p>}>
+      <OwnerReportsPage />
+    </Suspense>
   );
 }
