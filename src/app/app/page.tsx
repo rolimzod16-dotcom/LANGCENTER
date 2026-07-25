@@ -11,7 +11,6 @@ type SessionHint = "teacher" | "student" | null;
 
 export default function MobileAppPage() {
   const router = useRouter();
-  const [session, setSession] = useState<SessionHint>(null);
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
@@ -20,12 +19,10 @@ export default function MobileAppPage() {
       fetch("/api/student/me", { credentials: "same-origin" }),
     ]).then(async ([teacherRes, studentRes]) => {
       if (teacherRes.ok) {
-        setSession("teacher");
         router.replace("/teacher/dashboard");
         return;
       }
       if (studentRes.ok) {
-        setSession("student");
         router.replace("/student/dashboard");
         return;
       }
@@ -48,7 +45,7 @@ export default function MobileAppPage() {
           <Logo size="lg" className="mx-auto" />
           <h1 className="mt-5 text-2xl font-bold text-slate-900">Lang Center</h1>
           <p className="mt-2 text-slate-500">
-            Кабинет учителя и ученика на телефоне
+            Запись на курс, кабинет ученика и учителя
           </p>
         </div>
 
@@ -58,7 +55,7 @@ export default function MobileAppPage() {
 
         <div className="mt-6 space-y-3">
           <p className="text-center text-xs font-semibold uppercase tracking-widest text-slate-400">
-            или скачать APK
+            Скачать приложение
           </p>
           <ApkDownloadButton />
           <Link
@@ -69,26 +66,23 @@ export default function MobileAppPage() {
           </Link>
         </div>
 
+        <div className="mt-8">
+          <Link
+            href="/register"
+            className="lc-btn lc-btn-student flex w-full items-center justify-center py-4 text-base"
+          >
+            ✍️ Записаться на курс
+          </Link>
+          <p className="mt-2 text-center text-xs text-slate-400">
+            Сами придумываете логин и пароль — ими и входите
+          </p>
+        </div>
+
         <p className="mt-8 text-center text-xs font-semibold uppercase tracking-widest text-slate-400">
-          Войти
+          Уже есть аккаунт
         </p>
 
         <div className="mt-4 space-y-3">
-          <Link
-            href="/teacher/login"
-            className="lc-link-card flex items-center gap-4 p-5"
-          >
-            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-100 text-2xl">
-              👨‍🏫
-            </span>
-            <div>
-              <p className="font-bold text-slate-900">Я учитель</p>
-              <p className="text-sm text-slate-500">
-                Ученики, посещаемость, оценки
-              </p>
-            </div>
-          </Link>
-
           <Link
             href="/student/login"
             className="lc-link-card flex items-center gap-4 border-emerald-100 p-5"
@@ -103,12 +97,26 @@ export default function MobileAppPage() {
               </p>
             </div>
           </Link>
+
+          <Link
+            href="/teacher/login"
+            className="lc-link-card flex items-center gap-4 p-5"
+          >
+            <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-100 text-2xl">
+              👨‍🏫
+            </span>
+            <div>
+              <p className="font-bold text-slate-900">Я учитель</p>
+              <p className="text-sm text-slate-500">
+                Ученики, посещаемость, оценки
+              </p>
+            </div>
+          </Link>
         </div>
 
         <p className="mt-auto pt-10 text-center text-xs text-slate-400">
-          Админ-панель:{" "}
-          <Link href="/admin/login" className="font-medium text-violet-600">
-            вход владельца
+          <Link href="/" className="font-medium text-slate-500 hover:underline">
+            ← На сайт центра
           </Link>
         </p>
       </main>

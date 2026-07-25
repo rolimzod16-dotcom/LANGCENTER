@@ -3,10 +3,26 @@
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { CredentialsCard } from "@/components/admin/CredentialsCard";
-import { AccountListItem } from "@/components/admin/AccountListItem";
 import { AdminSubLayout } from "@/components/layout/AdminSubLayout";
 
 type Teacher = { id: string; full_name: string; teacher_code: string };
+type Billing = {
+  student_id: string;
+  payment_due_day: number;
+  period_month: string;
+  due_date: string;
+  next_due_date: string;
+  status: string;
+  amount_due: number;
+  amount_paid: number;
+  debt: number;
+  has_invoice: boolean;
+  payment_id: string | null;
+  can_mark_paid: boolean;
+  can_mark_unpaid: boolean;
+  label: string;
+};
+
 type Student = {
   id: string;
   full_name: string;
@@ -15,6 +31,8 @@ type Student = {
   teacher_name?: string;
   start_date: string | null;
   payment_due_day: number | null;
+  password_plain?: string | null;
+  billing?: Billing | null;
 };
 
 type StatusFilter = "all" | "active" | "inactive";
@@ -61,6 +79,8 @@ export default function AdminStudentsPage() {
   const [listError, setListError] = useState("");
 
   const [teacherId, setTeacherId] = useState("");
+  const [groupId, setGroupId] = useState("");
+  const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [monthlyFee, setMonthlyFee] = useState("500000");
@@ -73,6 +93,7 @@ export default function AdminStudentsPage() {
     password: string;
   } | null>(null);
   const [resettingId, setResettingId] = useState<string | null>(null);
+  const [payingId, setPayingId] = useState<string | null>(null);
 
   const parseFullName = (fullName: string) => {
     const parts = fullName.trim().split(/\s+/);
@@ -89,6 +110,9 @@ export default function AdminStudentsPage() {
     teacher_name?: string | null;
     start_date?: string | null;
     payment_due_day?: number | null;
+    password_plain?: string | null;
+    plain_password?: string | null;
+    billing?: Billing | null;
   }): Student => ({
     id: s.id,
     full_name: `${s.last_name} ${s.first_name}`.trim(),
@@ -97,7 +121,17 @@ export default function AdminStudentsPage() {
     teacher_name: s.teacher_name ?? undefined,
     start_date: s.start_date ?? null,
     payment_due_day: s.payment_due_day ?? null,
+    password_plain: s.password_plain ?? s.plain_password ?? null,
+    billing: s.billing ?? null,
   });
+
+  const copyText = (text: string) => {
+    void navigator.clipboard.writeText(text);
+  };
+
+  const isPhoneSearch =
+    search.replace(/\D/g, "").length >= 4 &&
+    search.replace(/\D/g, "").length >= search.replace(/\s/g, "").length * 0.5;
 
   const loadTeachers = useCallback(async () => {
     const res = await fetch("/api/teachers", { credentials: "include" });
@@ -156,6 +190,27 @@ export default function AdminStudentsPage() {
   }, [loadTeachers]);
 
   useEffect(() => {
+    if (!teacherId) {
+      setGroups([]);
+      setGroupId("");
+      return;
+    }
+    fetch(`/api/groups?teacher_id=${encodeURIComponent(teacherId)}`, {
+      credentials: "include",
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        const list = data.groups ?? [];
+        setGroups(list);
+        setGroupId(list[0]?.id ?? "");
+      })
+      .catch(() => {
+        setGroups([]);
+        setGroupId("");
+      });
+  }, [teacherId]);
+
+  useEffect(() => {
     loadStudents();
   }, [loadStudents]);
 
@@ -190,6 +245,7 @@ export default function AdminStudentsPage() {
           last_name,
           phone: phone || undefined,
           teacher_id: teacherId,
+          group_id: groupId || undefined,
           monthly_fee: Number(monthlyFee) || 500000,
           start_date: startDate,
           payment_due_day: Number(paymentDueDay) || 10,
@@ -227,11 +283,69 @@ export default function AdminStudentsPage() {
         code: data.credentials.student_code,
         password: data.credentials.plain_password,
       });
+      // Обновить пароль в карточке списка
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.id === id
+            ? { ...s, password_plain: data.credentials.plain_password }
+            : s,
+        ),
+      );
     } catch (err) {
       alert(err instanceof Error ? err.message : "Ошибка");
     } finally {
       setResettingId(null);
     }
+  };
+
+  const handleCashStatus = async (
+    studentId: string,
+    action: "paid" | "unpaid",
+  ) => {
+    setPayingId(studentId);
+    setListError("");
+    try {
+      const res = await fetch("/api/payments/student", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ student_id: studentId, action }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Ошибка оплаты");
+
+      setStudents((prev) =>
+        prev.map((s) =>
+          s.id === studentId
+            ? { ...s, billing: data.billing as Billing }
+            : s,
+        ),
+      );
+    } catch (err) {
+      setListError(err instanceof Error ? err.message : "Ошибка оплаты");
+    } finally {
+      setPayingId(null);
+    }
+  };
+
+  const billingBadge = (status: string) => {
+    if (status === "paid")
+      return "bg-emerald-100 text-emerald-800 border-emerald-200";
+    if (status === "overdue")
+      return "bg-red-100 text-red-800 border-red-200";
+    if (status === "partial")
+      return "bg-amber-100 text-amber-800 border-amber-200";
+    if (status === "new")
+      return "bg-blue-100 text-blue-800 border-blue-200";
+    return "bg-slate-100 text-slate-700 border-slate-200";
+  };
+
+  const billingTitle = (status: string) => {
+    if (status === "paid") return "Оплатил";
+    if (status === "overdue") return "Просрочено";
+    if (status === "partial") return "Частично";
+    if (status === "new") return "Нет счёта";
+    return "Не оплатил";
   };
 
   return (
@@ -294,6 +408,22 @@ export default function AdminStudentsPage() {
               ))}
             </select>
           </div>
+          {teacherId && groups.length > 0 && (
+            <div>
+              <label className="lc-label">Группа</label>
+              <select
+                value={groupId}
+                onChange={(e) => setGroupId(e.target.value)}
+                className="lc-input"
+              >
+                {groups.map((g) => (
+                  <option key={g.id} value={g.id}>
+                    {g.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
           <div>
             <label className="lc-label">ФИО ученика *</label>
             <input
@@ -304,12 +434,17 @@ export default function AdminStudentsPage() {
             />
           </div>
           <div>
-            <label className="lc-label">Телефон</label>
+            <label className="lc-label">Телефон родителя / контакт</label>
             <input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               className="lc-input"
+              placeholder="+998 90 123 45 67"
             />
+            <p className="mt-1 text-xs text-slate-500">
+              Один номер можно указать у нескольких учеников (братья, сёстры).
+              Поиск по телефону покажет всех прикреплённых.
+            </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
@@ -371,10 +506,23 @@ export default function AdminStudentsPage() {
             type="search"
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Поиск по имени, коду, телефону…"
+            placeholder="ФИО, код STU-… или телефон"
             className="lc-input w-full max-w-sm"
           />
         </div>
+
+        {search && isPhoneSearch && !listLoading && students.length > 0 && (
+          <div className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50 px-4 py-3 text-sm text-indigo-900">
+            Поиск по телефону «{search}»: найдено{" "}
+            <strong>{pagination.total}</strong>{" "}
+            {pagination.total === 1
+              ? "ученик"
+              : pagination.total < 5
+                ? "ученика"
+                : "учеников"}{" "}
+            с этим / похожим номером.
+          </div>
+        )}
 
         <div className="mb-4 flex flex-wrap gap-2">
           <select
@@ -432,8 +580,9 @@ export default function AdminStudentsPage() {
         </div>
 
         <p className="mb-4 text-sm text-slate-500">
-          Код виден всегда. Пароль зашифрован — только сброс. Показано{" "}
-          {students.length} из {pagination.total}.
+          Логин и пароль всегда видны в карточке. Наличные:{" "}
+          <strong>Оплатил</strong> / <strong>Не оплатил</strong> (цикл 10.10 →
+          10.11). Показано {students.length} из {pagination.total}.
         </p>
 
         {listLoading && students.length === 0 ? (
@@ -445,23 +594,129 @@ export default function AdminStudentsPage() {
             Ничего не найдено
           </p>
         ) : (
-          <ul className={`space-y-2 ${listLoading ? "opacity-60" : ""}`}>
+          <ul className={`space-y-3 ${listLoading ? "opacity-60" : ""}`}>
             {students.map((s) => {
-              const dateInfo = `Старт: ${formatDateRu(s.start_date)} · Оплата: ${s.payment_due_day ?? 10}-е число`;
+              const b = s.billing;
+              const dateInfo = `Старт: ${formatDateRu(s.start_date)} · День оплаты: ${s.payment_due_day ?? 10}-е`;
               const subtitle = s.teacher_name
                 ? `Учитель: ${s.teacher_name} · ${dateInfo}`
                 : s.phone
                   ? `${s.phone} · ${dateInfo}`
                   : dateInfo;
               return (
-                <AccountListItem
+                <li
                   key={s.id}
-                  name={s.full_name}
-                  code={s.student_code}
-                  subtitle={subtitle}
-                  onResetPassword={() => handleResetPassword(s.id)}
-                  resetting={resettingId === s.id}
-                />
+                  className="lc-card space-y-3 p-4 sm:space-y-0 sm:flex sm:flex-wrap sm:items-center sm:justify-between sm:gap-4"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-slate-900">{s.full_name}</p>
+                    <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+
+                    {/* Логин и пароль — всегда видны админу */}
+                    <div className="mt-2 grid gap-1.5 rounded-xl border border-slate-100 bg-slate-50 px-3 py-2 text-sm sm:max-w-md">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          Логин
+                        </span>
+                        <span className="font-mono font-bold text-indigo-700">
+                          {s.student_code}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => copyText(s.student_code)}
+                          className="text-xs font-semibold text-indigo-600 hover:underline"
+                        >
+                          Копировать
+                        </button>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                          Пароль (для восстановления)
+                        </span>
+                        {s.password_plain ? (
+                          <>
+                            <span className="font-mono font-bold text-slate-900">
+                              {s.password_plain}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => copyText(s.password_plain!)}
+                              className="text-xs font-semibold text-indigo-600 hover:underline"
+                            >
+                              Копировать
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                copyText(
+                                  `Логин: ${s.student_code}\nПароль: ${s.password_plain}`,
+                                )
+                              }
+                              className="text-xs font-semibold text-emerald-700 hover:underline"
+                            >
+                              Копировать логин + пароль
+                            </button>
+                          </>
+                        ) : (
+                          <span className="text-xs text-amber-700">
+                            Не сохранён — нажми «Новый пароль» (один раз), дальше
+                            будет всегда виден
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {b && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span
+                          className={`rounded-full border px-2.5 py-0.5 text-xs font-bold ${billingBadge(b.status)}`}
+                        >
+                          {billingTitle(b.status)}
+                        </span>
+                        <span className="text-xs text-slate-600">
+                          Срок: {formatDateRu(b.due_date)}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          → след.: {formatDateRu(b.next_due_date)}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={
+                        payingId === s.id || !b?.can_mark_paid
+                      }
+                      onClick={() => handleCashStatus(s.id, "paid")}
+                      className="rounded-xl bg-emerald-600 px-3 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      title="Наличные получены за текущий месяц"
+                    >
+                      {payingId === s.id ? "…" : "✓ Оплатил"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={
+                        payingId === s.id || !b?.can_mark_unpaid
+                      }
+                      onClick={() => handleCashStatus(s.id, "unpaid")}
+                      className="rounded-xl bg-red-50 px-3 py-2 text-xs font-bold text-red-700 ring-1 ring-red-200 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-40"
+                      title="Сбросить оплату за текущий месяц"
+                    >
+                      Не оплатил
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleResetPassword(s.id)}
+                      disabled={resettingId === s.id}
+                      className="lc-btn lc-btn-warning shrink-0 px-3 py-2 text-xs disabled:opacity-50"
+                      title="Сгенерировать новый пароль (старый перестанет работать)"
+                    >
+                      {resettingId === s.id ? "…" : "Новый пароль"}
+                    </button>
+                  </div>
+                </li>
               );
             })}
           </ul>

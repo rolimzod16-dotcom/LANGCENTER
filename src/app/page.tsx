@@ -50,22 +50,22 @@ const schedule = [
 
 const portalCards = [
   {
-    href: "/app",
-    icon: "📱",
-    title: "Мобильное приложение",
-    desc: "Скачать APK или войти с телефона — оценки и посещаемость всегда под рукой.",
+    href: "/register",
+    icon: "✍️",
+    title: "Записаться на курс",
+    desc: "Регистрация за минуту: свой логин и пароль, выбор курса и удобного времени.",
   },
   {
-    href: "/teacher/login",
-    icon: "👨‍🏫",
-    title: "Кабинет учителя",
-    desc: "Ученики, посещаемость, выставление оценок и комментарии к урокам.",
+    href: "/app",
+    icon: "📱",
+    title: "Приложение",
+    desc: "Скачать APK или открыть в браузере — кабинет ученика и учителя на телефоне.",
   },
   {
     href: "/student/login",
     icon: "🎓",
     title: "Кабинет ученика",
-    desc: "Оценки, посещаемость, оплаты и информация об учителях.",
+    desc: "Войдите логином и паролем, которые сами задали при записи.",
   },
 ];
 
@@ -89,6 +89,9 @@ export default function HomePage() {
             <a className="mk-nav-phone" href="tel:+992900000000">
               +992 90 000 00 00
             </a>
+            <Link className="mk-nav-login" href="/register">
+              Записаться
+            </Link>
             <Link className="mk-nav-login" href="/app">
               Войти
             </Link>
@@ -118,11 +121,11 @@ export default function HomePage() {
               языковом центре с онлайн-кабинетами для учеников и учителей.
             </p>
             <div className="mk-hero-actions">
-              <a className="mk-btn" href="#contact">
-                Записаться на пробный урок →
-              </a>
+              <Link className="mk-btn" href="/register">
+                Записаться на курс →
+              </Link>
               <Link className="mk-btn mk-btn-ghost-dark" href="/app">
-                Личный кабинет
+                Войти / скачать приложение
               </Link>
             </div>
           </div>
@@ -227,9 +230,9 @@ export default function HomePage() {
                 <div className="mk-label">Ближайшие группы</div>
                 <h2>Начните уже в этом месяце</h2>
               </div>
-              <a className="mk-btn" href="#contact">
+              <Link className="mk-btn" href="/register">
                 Подобрать курс →
-              </a>
+              </Link>
             </div>
             <div className="mk-rows">
               <div className="mk-row mk-row-head">
@@ -265,8 +268,8 @@ export default function HomePage() {
                 </h2>
               </div>
               <p>
-                Учителя отмечают посещаемость и ставят оценки. Ученики видят
-                прогресс и оплаты. Администратор управляет центром.
+                Запишитесь онлайн, зайдите в кабинет или скачайте приложение.
+                Учителя ставят оценки и посещаемость — всё в одном месте.
               </p>
             </div>
             <div className="mk-portal-grid">
@@ -279,12 +282,6 @@ export default function HomePage() {
                 </Link>
               ))}
             </div>
-            <p style={{ marginTop: 22, fontSize: 13, color: "var(--mk-muted)" }}>
-              Владелец центра:{" "}
-              <Link href="/admin" style={{ color: "var(--mk-navy)", fontWeight: 700 }}>
-                админ-панель →
-              </Link>
-            </p>
           </div>
         </section>
 
@@ -293,13 +290,18 @@ export default function HomePage() {
             <div>
               <h2>Первый шаг — самый простой.</h2>
               <p>
-                Оставьте заявку — пригласим на бесплатный пробный урок и подберём
-                группу.
+                Зарегистрируйтесь, выберите курс — или позвоните нам. Приложение
+                можно скачать в любой момент.
               </p>
             </div>
-            <a className="mk-btn mk-btn-light" href="tel:+992900000000">
-              Позвонить в центр →
-            </a>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
+              <Link className="mk-btn mk-btn-light" href="/register">
+                Записаться онлайн →
+              </Link>
+              <a className="mk-btn mk-btn-light" href="tel:+992900000000">
+                Позвонить
+              </a>
+            </div>
           </div>
         </section>
       </main>
@@ -319,9 +321,11 @@ export default function HomePage() {
             <br />
             +992 90 000 00 00 · hello@langcenter.tj
             <br />
-            <Link href="/app">Личный кабинет</Link>
+            <Link href="/register">Запись</Link>
             {" · "}
-            <Link href="/admin">Админ</Link>
+            <Link href="/app">Кабинет</Link>
+            {" · "}
+            <Link href="/student/login">Вход ученика</Link>
           </div>
         </div>
       </footer>

@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { LoginLayout } from "@/components/layout/LoginLayout";
 import {
@@ -47,14 +48,14 @@ export default function StudentLoginPage() {
   return (
     <LoginLayout
       role="student"
-      title="Вход"
-      subtitle="Код STU-2026-XXXXXX и пароль от языкового центра"
+      title="Вход ученика"
+      subtitle="Логин и пароль, которые вы указали при регистрации"
     >
       <form onSubmit={handleSubmit} className="lc-card p-6">
-        <label className="lc-label">Код ученика</label>
+        <label className="lc-label">Логин</label>
         <input
           required
-          placeholder="STU-2026-XXXXXX"
+          placeholder="Ваш логин"
           value={code}
           onChange={(e) => setCode(e.target.value.toUpperCase())}
           autoComplete="username"
@@ -64,7 +65,7 @@ export default function StudentLoginPage() {
         <input
           required
           type="password"
-          placeholder="Введите пароль"
+          placeholder="Ваш пароль"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="current-password"
@@ -77,10 +78,29 @@ export default function StudentLoginPage() {
         >
           {loading ? "Вход..." : "Войти"}
         </button>
-        {error && (
-          <p className="lc-alert lc-alert-error mt-4">{error}</p>
-        )}
+        {error && <p className="lc-alert lc-alert-error mt-4">{error}</p>}
       </form>
+
+      <div className="mt-6 space-y-3 text-center text-sm">
+        <p className="text-slate-500">
+          Нет аккаунта?{" "}
+          <Link
+            href="/register"
+            className="font-semibold text-emerald-700 hover:underline"
+          >
+            Записаться на курс
+          </Link>
+        </p>
+        <p className="text-slate-400">
+          Забыли пароль? Обратитесь в центр — администрация видит ваш логин и
+          пароль и поможет восстановить доступ.
+        </p>
+        <p>
+          <Link href="/app" className="font-medium text-indigo-600 hover:underline">
+            Скачать приложение →
+          </Link>
+        </p>
+      </div>
     </LoginLayout>
   );
 }
