@@ -2,8 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Lang Center",
-  description: "Кабинет учителя и ученика языкового центра",
+  title: "Lang Center — языковой центр в Душанбе",
+  description:
+    "Языковой центр Lang Center: английский, китайский, русский и турецкий. Пробный урок, группы, онлайн-кабинеты для учеников и учителей.",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
