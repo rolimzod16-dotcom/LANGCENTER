@@ -15,6 +15,8 @@ export type RawStudentRow = {
   first_name?: string | null;
   last_name?: string | null;
   is_active?: boolean | null;
+  password_plain?: string | null;
+  phone_digits?: string | null;
 };
 
 export function isSchemaColumnError(message: string): boolean {
@@ -24,6 +26,8 @@ export function isSchemaColumnError(message: string): boolean {
     lower.includes("status") ||
     lower.includes("start_date") ||
     lower.includes("payment_due_day") ||
+    lower.includes("password_plain") ||
+    lower.includes("phone_digits") ||
     lower.includes("column") ||
     lower.includes("does not exist")
   );
@@ -45,6 +49,7 @@ export function mapRawStudent(row: RawStudentRow, mode: StudentSchemaMode): Stud
       created_at: row.created_at,
       start_date: row.start_date ?? null,
       payment_due_day: row.payment_due_day ?? null,
+      password_plain: row.password_plain ?? null,
     };
   }
 
@@ -55,10 +60,11 @@ export function mapRawStudent(row: RawStudentRow, mode: StudentSchemaMode): Stud
     email: null,
     phone: row.phone,
     student_code: row.student_code,
-    is_active: row.is_active ?? (row.status === "active"),
+    is_active: row.is_active ?? row.status === "active",
     created_at: row.created_at,
     start_date: row.start_date ?? null,
     payment_due_day: row.payment_due_day ?? null,
+    password_plain: row.password_plain ?? null,
   };
 }
 
@@ -70,13 +76,23 @@ export function escapeIlike(value: string): string {
   return value.replace(/[%_\\,]/g, (ch) => `\\${ch}`);
 }
 
+/** Полный select для админки (код + пароль видны) */
 export const STUDENT_SELECT_MODERN =
-  "id, full_name, phone, student_code, status, created_at, start_date, payment_due_day, monthly_fee";
+  "id, full_name, phone, student_code, status, created_at, start_date, payment_due_day, monthly_fee, password_plain, phone_digits";
+
+export const STUDENT_SELECT_MODERN_NO_PLAIN =
+  "id, full_name, phone, student_code, status, created_at, start_date, payment_due_day, monthly_fee, phone_digits";
 
 export const STUDENT_SELECT_MODERN_MIN =
+  "id, full_name, phone, student_code, status, created_at, start_date, payment_due_day, monthly_fee";
+
+export const STUDENT_SELECT_MODERN_BASIC =
   "id, full_name, phone, student_code, status, created_at";
 
 export const STUDENT_SELECT_LEGACY =
+  "id, first_name, last_name, phone, student_code, is_active, created_at, monthly_fee, password_plain, phone_digits";
+
+export const STUDENT_SELECT_LEGACY_NO_PLAIN =
   "id, first_name, last_name, phone, student_code, is_active, created_at, monthly_fee";
 
 export const STUDENT_SELECT_LEGACY_MIN =
@@ -87,7 +103,10 @@ export const STUDENT_SELECT_ATTEMPTS: Array<{
   schema: StudentSchemaMode;
 }> = [
   { select: STUDENT_SELECT_MODERN, schema: "modern" },
+  { select: STUDENT_SELECT_MODERN_NO_PLAIN, schema: "modern" },
   { select: STUDENT_SELECT_MODERN_MIN, schema: "modern" },
+  { select: STUDENT_SELECT_MODERN_BASIC, schema: "modern" },
   { select: STUDENT_SELECT_LEGACY, schema: "legacy" },
+  { select: STUDENT_SELECT_LEGACY_NO_PLAIN, schema: "legacy" },
   { select: STUDENT_SELECT_LEGACY_MIN, schema: "legacy" },
 ];
