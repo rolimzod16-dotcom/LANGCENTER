@@ -1,13 +1,24 @@
--- Lang Center: пароль всегда виден админу + поиск по телефону (несколько учеников на 1 номер)
--- Supabase → SQL Editor → Run
+-- Lang Center: пароль виден админу + поиск по телефону
+-- Supabase → SQL Editor → Run (целиком)
 
--- Пароль в открытом виде только для админ-панели (логин по-прежнему через password_hash)
+-- Пароль в открытом виде только для админ-панели (вход идёт через password_hash)
 ALTER TABLE students ADD COLUMN IF NOT EXISTS password_plain TEXT;
 
--- Только цифры телефона для поиска (формат +998… / 90-123-45-67 не мешает)
+-- Только цифры телефона для поиска
 ALTER TABLE students ADD COLUMN IF NOT EXISTS phone_digits TEXT;
 
--- Телефон НЕ уникальный: братья/сёстры / один родитель — несколько учеников
+-- Заметка: курс / смена при записи с сайта
+ALTER TABLE students ADD COLUMN IF NOT EXISTS notes TEXT;
+
+-- На всякий случай — базовые колонки (если старая БД)
+ALTER TABLE students ADD COLUMN IF NOT EXISTS full_name TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+ALTER TABLE students ADD COLUMN IF NOT EXISTS password_hash TEXT;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS monthly_fee NUMERIC(12,2) DEFAULT 500000;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS start_date DATE DEFAULT CURRENT_DATE;
+ALTER TABLE students ADD COLUMN IF NOT EXISTS payment_due_day INTEGER DEFAULT 10;
+
+-- Телефон НЕ уникальный (несколько учеников / один номер родителя)
 DO $$
 DECLARE
   r RECORD;
@@ -24,7 +35,6 @@ BEGIN
   END LOOP;
 END $$;
 
--- Backfill phone_digits
 UPDATE students
 SET phone_digits = NULLIF(regexp_replace(COALESCE(phone, ''), '[^0-9]', '', 'g'), '')
 WHERE phone IS NOT NULL
@@ -32,5 +42,9 @@ WHERE phone IS NOT NULL
 
 CREATE INDEX IF NOT EXISTS idx_students_phone_digits ON students(phone_digits);
 CREATE INDEX IF NOT EXISTS idx_students_phone ON students(phone);
+CREATE INDEX IF NOT EXISTS idx_students_student_code ON students(student_code);
 
-SELECT 'UPGRADE_CREDENTIALS: password_plain + phone_digits — готово.' AS result;
+-- Обновить schema cache PostgREST (иногда помогает)
+NOTIFY pgrst, 'reload schema';
+
+SELECT 'UPGRADE_CREDENTIALS: password_plain + phone_digits + notes — готово.' AS result;

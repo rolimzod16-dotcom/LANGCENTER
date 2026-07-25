@@ -508,6 +508,7 @@ export async function createStudent(input: {
 }): Promise<CreateStudentResult> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен. Проверь .env.local");
+  const db = supabase;
 
   let studentCode: string;
   if (input.student_code?.trim()) {
@@ -517,11 +518,11 @@ export async function createStudent(input: {
         "Логин: 3–32 символа (латиница, цифры, . _ @ -)",
       );
     }
-    if (await isStudentLoginTaken(studentCode, supabase)) {
+    if (await isStudentLoginTaken(studentCode, db)) {
       throw new Error("Такой логин уже занят — выберите другой");
     }
   } else {
-    studentCode = await generateUniqueCode(supabase);
+    studentCode = await generateUniqueCode(db);
   }
 
   const plainPassword = input.password?.trim()
@@ -542,118 +543,167 @@ export async function createStudent(input: {
     input.organization_id === undefined
       ? await getAdminOrgId()
       : input.organization_id;
+  // multi-org optional — orgInsertFields already no-ops if table missing
   const orgFields = await orgInsertFields(orgId);
   const notes = input.notes?.trim() || null;
 
-  let data: RawStudentRow | null = null;
-  let schema: StudentSchemaMode = "modern";
+  function missingColumn(message: string): string | null {
+    const m =
+      message.match(/Could not find the '([^']+)' column/i) ||
+      message.match(/column (?:\w+\.)?(\w+) does not exist/i);
+    return m?.[1] ?? null;
+  }
 
-  for (const modern of [true, false]) {
-    const row: Record<string, unknown> = modern
-      ? {
-          full_name: fullName,
-          phone,
-          phone_digits: digits || null,
-          student_code: studentCode,
-          password_hash: passwordHash,
-          password_plain: plainPassword,
-          status: "active",
-          ...orgFields,
-        }
-      : {
-          first_name: input.first_name.trim(),
-          last_name: input.last_name.trim(),
-          phone,
-          phone_digits: digits || null,
-          student_code: studentCode,
-          password_hash: passwordHash,
-          password_plain: plainPassword,
-          is_active: true,
-          ...orgFields,
-        };
-
-    if (notes) {
-      // если колонки notes нет — уберём при ошибке
-      row.notes = notes;
-    }
-
-    if (input.monthly_fee !== undefined && input.monthly_fee > 0) {
-      row.monthly_fee = input.monthly_fee;
-    }
-    if (input.start_date) row.start_date = input.start_date;
-    if (input.payment_due_day !== undefined) {
-      row.payment_due_day = Math.min(
-        Math.max(Math.round(input.payment_due_day), 1),
-        28,
-      );
-    }
-
-    const select = modern ? STUDENT_SELECT_MODERN : STUDENT_SELECT_LEGACY;
-    let created = await supabase.from("students").insert(row).select(select).single();
-
-    // Постепенно убираем колонки, которых ещё нет в БД
-    if (created.error) {
-      const msg = created.error.message.toLowerCase();
-      if (
-        msg.includes("password_plain") ||
-        msg.includes("phone_digits") ||
-        msg.includes("notes")
-      ) {
-        const stripped = { ...row };
-        if (msg.includes("password_plain")) delete stripped.password_plain;
-        if (msg.includes("phone_digits")) delete stripped.phone_digits;
-        if (msg.includes("notes")) delete stripped.notes;
-        created = await supabase
-          .from("students")
-          .insert(stripped)
-          .select(select)
-          .single();
-      }
-    }
-
-    if (!created.error && created.data) {
-      data = created.data as unknown as RawStudentRow;
-      schema = modern ? "modern" : "legacy";
-      break;
-    }
-
-    const msg = created.error?.message ?? "";
-    if (msg.includes("password_hash")) {
-      throw new Error(
-        "Нужна миграция БД: запусти supabase/FIX_SCHEMA_CLEAN.sql в Supabase SQL Editor",
-      );
-    }
-    if (msg.toLowerCase().includes("unique") && msg.toLowerCase().includes("phone")) {
-      throw new Error(
-        "В БД телефон уникальный. Запусти supabase/UPGRADE_CREDENTIALS.sql — несколько учеников на один номер.",
-      );
-    }
-    if (msg.toLowerCase().includes("organization_id")) {
-      delete row.organization_id;
-      const retry = await supabase
+  /** Insert с колонками, которые реально есть в текущей БД. */
+  async function insertCore(
+    base: Record<string, unknown>,
+    select: string,
+  ): Promise<{ data: RawStudentRow | null; error: string }> {
+    const row = { ...base };
+    for (let i = 0; i < 10; i++) {
+      const { data, error } = await db
         .from("students")
         .insert(row)
         .select(select)
         .single();
-      if (!retry.error && retry.data) {
-        data = retry.data as unknown as RawStudentRow;
-        schema = modern ? "modern" : "legacy";
-        break;
+
+      if (!error && data) {
+        return { data: data as unknown as RawStudentRow, error: "" };
       }
+
+      const msg = error?.message ?? "unknown";
+      const lower = msg.toLowerCase();
+
+      if (lower.includes("duplicate") || lower.includes("unique")) {
+        if (lower.includes("student_code")) {
+          throw new Error("Такой логин уже занят — выберите другой");
+        }
+        if (lower.includes("phone")) {
+          throw new Error(
+            "Телефон уже занят. Запусти supabase/UPGRADE_CREDENTIALS.sql",
+          );
+        }
+        throw new Error(msg);
+      }
+
+      const miss = missingColumn(msg);
+      if (miss && miss in row) {
+        delete row[miss];
+        continue;
+      }
+
+      // optional noise in message
+      let stripped = false;
+      for (const key of Object.keys(row)) {
+        if (
+          key !== "student_code" &&
+          key !== "password_hash" &&
+          key !== "full_name" &&
+          key !== "first_name" &&
+          key !== "last_name" &&
+          key !== "status" &&
+          key !== "is_active" &&
+          lower.includes(key)
+        ) {
+          delete row[key];
+          stripped = true;
+        }
+      }
+      if (stripped) continue;
+
+      return { data: null, error: msg };
     }
-    if (!isSchemaColumnError(msg) && !msg.includes("Could not find")) {
-      throw new Error(msg);
-    }
+    return { data: null, error: "too many retries" };
   }
 
-  if (!data) {
-    throw new Error(
-      "Не удалось создать ученика. Запусти supabase/FIX_SCHEMA_CLEAN.sql и UPGRADE_CREDENTIALS.sql",
+  // База под реальную схему (full_name/status/password_hash) — без optional-колонок
+  const modernBase: Record<string, unknown> = {
+    full_name: fullName,
+    phone,
+    student_code: studentCode,
+    password_hash: passwordHash,
+    status: "active",
+  };
+  if (input.monthly_fee !== undefined && input.monthly_fee > 0) {
+    modernBase.monthly_fee = input.monthly_fee;
+  }
+  if (input.start_date) modernBase.start_date = input.start_date;
+  if (input.payment_due_day !== undefined) {
+    modernBase.payment_due_day = Math.min(
+      Math.max(Math.round(input.payment_due_day), 1),
+      28,
+    );
+  }
+  // org только если multi-org реально есть
+  Object.assign(modernBase, orgFields);
+
+  let schema: StudentSchemaMode = "modern";
+  let created = await insertCore(
+    modernBase,
+    "id, full_name, phone, student_code, status, created_at, start_date, payment_due_day, monthly_fee",
+  );
+
+  if (!created.data) {
+    // legacy shape
+    schema = "legacy";
+    created = await insertCore(
+      {
+        first_name: input.first_name.trim(),
+        last_name: input.last_name.trim(),
+        phone,
+        student_code: studentCode,
+        password_hash: passwordHash,
+        is_active: true,
+        ...(input.monthly_fee !== undefined && input.monthly_fee > 0
+          ? { monthly_fee: input.monthly_fee }
+          : {}),
+        ...orgFields,
+      },
+      "id, first_name, last_name, phone, student_code, is_active, created_at",
     );
   }
 
+  if (!created.data) {
+    throw new Error(
+      created.error
+        ? `Не удалось создать ученика: ${created.error}`
+        : "Не удалось создать ученика",
+    );
+  }
+
+  // Best-effort extras (колонок может не быть, пока не запущен UPGRADE_CREDENTIALS.sql)
+  const extras: Record<string, unknown> = {
+    password_plain: plainPassword,
+  };
+  if (digits) extras.phone_digits = digits;
+  if (notes) extras.notes = notes;
+
+  let payload: Record<string, unknown> = { ...extras };
+  for (let i = 0; i < 6 && Object.keys(payload).length > 0; i++) {
+    const { error: extraErr } = await db
+      .from("students")
+      .update(payload)
+      .eq("id", created.data.id);
+    if (!extraErr) break;
+
+    const miss = missingColumn(extraErr.message);
+    if (miss && miss in payload) {
+      delete payload[miss];
+      continue;
+    }
+    const lower = extraErr.message.toLowerCase();
+    let stripped = false;
+    for (const key of Object.keys(payload)) {
+      if (lower.includes(key)) {
+        delete payload[key];
+        stripped = true;
+      }
+    }
+    if (!stripped) break;
+  }
+
   return {
-    ...mapRawStudent(data, schema),
+    ...mapRawStudent(created.data, schema),
     password_plain: plainPassword,
     plain_password: plainPassword,
     organization_id: orgId ?? null,
