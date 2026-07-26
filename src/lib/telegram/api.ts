@@ -101,11 +101,16 @@ export async function answerCallback(
   callbackQueryId: string,
   text?: string,
 ) {
-  return tgApi(token, "answerCallbackQuery", {
-    callback_query_id: callbackQueryId,
-    text,
-    show_alert: false,
-  });
+  try {
+    return await tgApi(token, "answerCallbackQuery", {
+      callback_query_id: callbackQueryId,
+      text,
+      show_alert: false,
+    });
+  } catch (err) {
+    console.error("answerCallback failed", err);
+    return null;
+  }
 }
 
 export function inlineKeyboard(rows: InlineButton[][]) {
