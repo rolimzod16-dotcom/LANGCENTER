@@ -1,29 +1,167 @@
+import { getAdminOrgId, orgInsertFields } from "@/lib/org";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
-export async function assignStudentToTeacher(
-  studentId: string,
-  teacherId: string,
-) {
+export async function listGroupsForTeacher(teacherId: string) {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");
 
-  const { data: group, error: groupError } = await supabase
+  const { data, error } = await supabase
     .from("groups")
-    .select("id")
+    .select("id, name, level, teacher_id, created_at")
     .eq("teacher_id", teacherId)
-    .limit(1)
-    .maybeSingle();
+    .order("name", { ascending: true });
 
-  if (groupError) throw new Error(groupError.message);
-  if (!group) throw new Error("У учителя нет группы");
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+export async function listAllGroups(orgId?: string | null) {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase не настроен");
+
+  const resolvedOrg = orgId === undefined ? await getAdminOrgId() : orgId;
+  let query = supabase
+    .from("groups")
+    .select("id, name, level, teacher_id, teachers(full_name, teacher_code)")
+    .order("name", { ascending: true });
+
+  if (resolvedOrg) {
+    query = query.eq("organization_id", resolvedOrg);
+  }
+
+  const { data, error } = await query;
+  if (error) {
+    // fallback without org column
+    if (error.message.toLowerCase().includes("organization_id")) {
+      const fallback = await supabase
+        .from("groups")
+        .select("id, name, level, teacher_id, teachers(full_name, teacher_code)")
+        .order("name", { ascending: true });
+      if (fallback.error) throw new Error(fallback.error.message);
+      return fallback.data ?? [];
+    }
+    throw new Error(error.message);
+  }
+  return data ?? [];
+}
+
+export async function createGroupForTeacher(input: {
+  teacher_id: string;
+  name: string;
+  level?: string;
+  organization_id?: string | null;
+}) {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase не настроен");
+
+  const orgFields = await orgInsertFields(
+    input.organization_id ?? (await getAdminOrgId()),
+  );
+
+  const base = {
+    teacher_id: input.teacher_id,
+    name: input.name.trim(),
+    level: input.level?.trim() || null,
+  };
+
+  let { data, error } = await supabase
+    .from("groups")
+    .insert({ ...base, ...orgFields })
+    .select("id, name, level, teacher_id")
+    .single();
+
+  // organization_id column may not exist
+  if (error?.message.toLowerCase().includes("organization_id")) {
+    const retry = await supabase
+      .from("groups")
+      .insert(base)
+      .select("id, name, level, teacher_id")
+      .single();
+    data = retry.data;
+    error = retry.error;
+  }
+
+  if (error) throw new Error(error.message);
+  return data!;
+}
+
+export async function assignStudentToGroup(studentId: string, groupId: string) {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase не настроен");
 
   const { error } = await supabase.from("group_students").upsert(
-    { group_id: group.id, student_id: studentId },
+    { group_id: groupId, student_id: studentId },
     { onConflict: "group_id,student_id" },
   );
 
   if (error) throw new Error(error.message);
-  return { group_id: group.id };
+  return { group_id: groupId };
+}
+
+export async function assignStudentToTeacher(
+  studentId: string,
+  teacherId: string,
+  groupId?: string,
+) {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase не настроен");
+
+  let targetGroupId = groupId;
+
+  if (!targetGroupId) {
+    const { data: group, error: groupError } = await supabase
+      .from("groups")
+      .select("id")
+      .eq("teacher_id", teacherId)
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (groupError) throw new Error(groupError.message);
+    if (!group) {
+      // Авто-группа, чтобы админ мог сразу закрепить ученика
+      const created = await createGroupForTeacher({
+        teacher_id: teacherId,
+        name: "Основная группа",
+      });
+      targetGroupId = created.id;
+    } else {
+      targetGroupId = group.id;
+    }
+  } else {
+    const { data: group, error } = await supabase
+      .from("groups")
+      .select("id, teacher_id")
+      .eq("id", targetGroupId)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!group) throw new Error("Группа не найдена");
+    if (group.teacher_id !== teacherId) {
+      throw new Error("Группа принадлежит другому учителю");
+    }
+  }
+
+  if (!targetGroupId) throw new Error("Группа не выбрана");
+  return assignStudentToGroup(studentId, targetGroupId);
+}
+
+/** Ученик закреплён за этим учителем (через любую его группу). */
+export async function isStudentAssignedToTeacher(
+  studentId: string,
+  teacherId: string,
+): Promise<boolean> {
+  const ids = await getStudentIdsForTeacher(teacherId);
+  return ids.includes(studentId);
+}
+
+export async function assertStudentAssignedToTeacher(
+  studentId: string,
+  teacherId: string,
+) {
+  const ok = await isStudentAssignedToTeacher(studentId, teacherId);
+  if (!ok) {
+    throw new Error("Этот ученик не в ваших группах");
+  }
 }
 
 export async function getTeacherNamesByStudentIds(
@@ -35,17 +173,30 @@ export async function getTeacherNamesByStudentIds(
   const supabase = getSupabaseServerClient();
   if (!supabase) return map;
 
-  const { data, error } = await supabase
-    .from("group_students")
-    .select("student_id, groups(teachers(full_name))")
-    .in("student_id", studentIds);
+  // Chunk IN queries for large lists
+  const chunkSize = 200;
+  for (let i = 0; i < studentIds.length; i += chunkSize) {
+    const chunk = studentIds.slice(i, i + chunkSize);
+    const { data, error } = await supabase
+      .from("group_students")
+      .select("student_id, groups(name, teachers(full_name))")
+      .in("student_id", chunk);
 
-  if (error) return map;
+    if (error) continue;
 
-  for (const row of data ?? []) {
-    const g = row.groups as unknown as { teachers: { full_name: string } } | null;
-    if (g?.teachers?.full_name) {
-      map.set(row.student_id, g.teachers.full_name);
+    for (const row of data ?? []) {
+      const g = row.groups as unknown as {
+        name?: string;
+        teachers: { full_name: string } | null;
+      } | null;
+      if (g?.teachers?.full_name) {
+        const existing = map.get(row.student_id);
+        if (existing && !existing.includes(g.teachers.full_name)) {
+          map.set(row.student_id, `${existing}, ${g.teachers.full_name}`);
+        } else if (!existing) {
+          map.set(row.student_id, g.teachers.full_name);
+        }
+      }
     }
   }
 
@@ -102,34 +253,65 @@ export async function getTeacherStudents(teacherId: string) {
   const { data: groups, error: gErr } = await supabase
     .from("groups")
     .select("id, name")
-    .eq("teacher_id", teacherId);
+    .eq("teacher_id", teacherId)
+    .order("name", { ascending: true });
 
   if (gErr) throw new Error(gErr.message);
   if (!groups?.length) return [];
 
+  const groupById = new Map(groups.map((g) => [g.id, g.name]));
   const groupIds = groups.map((g) => g.id);
+
   const { data, error } = await supabase
     .from("group_students")
-    .select("student_id, students(id, full_name, student_code, phone)")
+    .select("group_id, student_id, students(id, full_name, student_code, phone)")
     .in("group_id", groupIds);
 
   if (error) throw new Error(error.message);
 
-  return (data ?? []).map((row) => {
+  const byStudent = new Map<
+    string,
+    {
+      id: string;
+      full_name: string;
+      student_code: string;
+      phone: string | null;
+      group_name: string;
+      group_names: string[];
+    }
+  >();
+
+  for (const row of data ?? []) {
     const s = row.students as unknown as {
       id: string;
       full_name: string;
       student_code: string;
       phone: string | null;
-    };
-    return {
-      id: s.id,
-      full_name: s.full_name,
-      student_code: s.student_code,
-      phone: s.phone,
-      group_name: groups[0]?.name ?? "",
-    };
-  });
+    } | null;
+    if (!s?.id) continue;
+
+    const gName = groupById.get(row.group_id) ?? "";
+    const existing = byStudent.get(s.id);
+    if (existing) {
+      if (gName && !existing.group_names.includes(gName)) {
+        existing.group_names.push(gName);
+        existing.group_name = existing.group_names.join(", ");
+      }
+    } else {
+      byStudent.set(s.id, {
+        id: s.id,
+        full_name: s.full_name,
+        student_code: s.student_code,
+        phone: s.phone,
+        group_name: gName,
+        group_names: gName ? [gName] : [],
+      });
+    }
+  }
+
+  return [...byStudent.values()].sort((a, b) =>
+    a.full_name.localeCompare(b.full_name, "ru"),
+  );
 }
 
 export async function getStudentTeachers(studentId: string) {
@@ -158,3 +340,28 @@ export async function getStudentTeachers(studentId: string) {
     };
   });
 }
+
+export async function ensureDefaultGroupForTeacher(
+  teacherId: string,
+  groupName: string,
+  organizationId?: string | null,
+) {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase не настроен");
+
+  const { data: existing } = await supabase
+    .from("groups")
+    .select("id")
+    .eq("teacher_id", teacherId)
+    .limit(1)
+    .maybeSingle();
+
+  if (existing) return existing;
+
+  return createGroupForTeacher({
+    teacher_id: teacherId,
+    name: groupName,
+    organization_id: organizationId,
+  });
+}
+
