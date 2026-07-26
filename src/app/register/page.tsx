@@ -163,7 +163,9 @@ export default function RegisterPage() {
             Удобнее с телефона?
           </p>
           <p className="mt-1 text-sm text-indigo-800/80">
-            Скачайте APK или откройте кабинет в браузере — тот же логин и пароль.
+            После регистрации можно привязать кабинет в Telegram-боте ученика
+            (<code className="text-xs">/login ЛОГИН пароль</code>) — оценки и
+            посещаемость в чате. Либо скачайте APK / откройте в браузере.
           </p>
           <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-center">
             <ApkDownloadButton variant="compact" />
@@ -173,6 +175,16 @@ export default function RegisterPage() {
             >
               Открыть приложение →
             </Link>
+            {process.env.NEXT_PUBLIC_TG_STUDENT_BOT ? (
+              <a
+                href={`https://t.me/${process.env.NEXT_PUBLIC_TG_STUDENT_BOT.replace(/^@/, "")}`}
+                target="_blank"
+                rel="noreferrer"
+                className="text-center text-sm font-semibold text-sky-700 hover:underline"
+              >
+                Telegram-бот ученика →
+              </a>
+            ) : null}
           </div>
         </div>
 

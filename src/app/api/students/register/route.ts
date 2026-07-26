@@ -5,6 +5,7 @@ import {
   normalizeStudentLogin,
   registerPublicStudent,
 } from "@/lib/students";
+import { notifyAdminsNewLead } from "@/lib/telegram/notify";
 
 export async function POST(request: NextRequest) {
   try {
@@ -63,6 +64,17 @@ export async function POST(request: NextRequest) {
     });
 
     await setSession("student", student.id, student.organization_id ?? null);
+
+    // Уведомление в Telegram-бот админа/руководителя (если настроен)
+    void notifyAdminsNewLead({
+      full_name: `${student.last_name} ${student.first_name}`.trim(),
+      login: student.student_code,
+      password: student.plain_password,
+      phone: student.phone,
+      course: preferredCourse || undefined,
+      schedule: preferredSchedule || undefined,
+      student_id: student.id,
+    }).catch((err) => console.error("telegram notify lead", err));
 
     return NextResponse.json(
       {
