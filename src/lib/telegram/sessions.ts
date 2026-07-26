@@ -1,6 +1,6 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
-export type TgBotKind = "student" | "admin";
+export type TgBotKind = "student" | "admin" | "teacher";
 
 export type TgSession = {
   chat_id: number;

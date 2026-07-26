@@ -33,16 +33,19 @@ import {
 import {
   clearTgSession,
   getTgSession,
+  patchTgSession,
   setTgSession,
 } from "@/lib/telegram/sessions";
 import { getTeacherNamesByStudentIds } from "@/lib/groups";
+import { createTeacher } from "@/lib/teachers";
 
 function adminKeyboard() {
   return replyKeyboard([
     ["📋 Заявки", "✅ Ожидают"],
     ["🔍 Найти ученика", "🔗 Назначить"],
-    ["👥 Ученики", "👨‍🏫 Учителя"],
-    ["🌐 Сайт", "❓ Помощь"],
+    ["➕ Учитель", "👨‍🏫 Учителя"],
+    ["👥 Ученики", "🌐 Сайт"],
+    ["❓ Помощь"],
   ]);
 }
 
@@ -420,7 +423,7 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
     return;
   }
 
-  // multi-step: search
+  // multi-step: search / create teacher
   if (await isAdminChat(chatId)) {
     const session = await getTgSession(chatId, "admin");
     if (session.state === "search_student") {
@@ -433,6 +436,79 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
       }
       await clearTgSession(chatId, "admin");
       await doSearchAndShow(token, chatId, text);
+      return;
+    }
+    if (session.state === "new_teacher_name") {
+      if (text === "❌ Отмена" || text === "/cancel") {
+        await clearTgSession(chatId, "admin");
+        await sendMessage(token, chatId, "Отменено.", {
+          reply_markup: adminKeyboard(),
+        });
+        return;
+      }
+      if (text.trim().length < 2) {
+        await sendMessage(token, chatId, "Введите имя и фамилию учителя.");
+        return;
+      }
+      await patchTgSession(chatId, "admin", "new_teacher_phone", {
+        full_name: text.trim(),
+      });
+      await sendMessage(
+        token,
+        chatId,
+        "📞 Телефон учителя? (или «-»)",
+      );
+      return;
+    }
+    if (session.state === "new_teacher_phone") {
+      const full = String(session.data.full_name || "").trim();
+      const parts = full.split(/\s+/);
+      const last_name = parts[0] || "Учитель";
+      const first_name = parts.slice(1).join(" ") || "Новый";
+      const phone = text === "-" ? undefined : text.trim();
+      try {
+        const teacher = await createTeacher({
+          first_name,
+          last_name,
+          phone,
+          group_name: `Группа ${last_name}`,
+        });
+        // best-effort password_plain
+        const supabase = getSupabaseServerClient();
+        if (supabase && teacher.plain_password) {
+          await supabase
+            .from("teachers")
+            .update({ password_plain: teacher.plain_password })
+            .eq("id", teacher.id);
+        }
+        await clearTgSession(chatId, "admin");
+        const teacherBot = process.env.NEXT_PUBLIC_TG_TEACHER_BOT
+          ? `https://t.me/${process.env.NEXT_PUBLIC_TG_TEACHER_BOT.replace(/^@/, "")}`
+          : "teacher-бот";
+        await sendMessage(
+          token,
+          chatId,
+          [
+            `✅ <b>Учитель создан</b>`,
+            ``,
+            `👤 ${escapeHtml(teacher.full_name)}`,
+            `🔑 <code>${escapeHtml(teacher.teacher_code)}</code>`,
+            `🔐 <code>${escapeHtml(teacher.plain_password)}</code>`,
+            ``,
+            `Передайте код и пароль учителю.`,
+            `Вход в TG: ${teacherBot}`,
+            `<code>/login ${escapeHtml(teacher.teacher_code)} ${escapeHtml(teacher.plain_password)}</code>`,
+            `Веб: ${appBaseUrl()}/teacher/login`,
+          ].join("\n"),
+          { reply_markup: adminKeyboard() },
+        );
+      } catch (e) {
+        await sendMessage(
+          token,
+          chatId,
+          `❌ ${e instanceof Error ? e.message : "Ошибка"}`,
+        );
+      }
       return;
     }
   }
@@ -492,6 +568,8 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
     text === "/search" ||
     text === "🔗 Назначить" ||
     text === "/assign" ||
+    text === "➕ Учитель" ||
+    text === "/newteacher" ||
     text.startsWith("/find ") ||
     text.startsWith("/search ");
 
@@ -527,6 +605,20 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
       token,
       chatId,
       "🔍 Введите <b>имя</b>, <b>логин</b> (STU…) или <b>телефон</b>:\n\nПример: <code>Али</code> · <code>STU01</code> · <code>99290</code>\nОтмена: /cancel",
+    );
+    return;
+  }
+
+  if (
+    text === "➕ Учитель" ||
+    text === "/newteacher" ||
+    text === "/teacher_new"
+  ) {
+    await setTgSession(chatId, "admin", "new_teacher_name", {});
+    await sendMessage(
+      token,
+      chatId,
+      "➕ <b>Новый учитель</b>\n\nИмя и фамилия?\nОтмена: /cancel",
     );
     return;
   }
@@ -571,6 +663,7 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
       "✅ Ожидают",
       "🔍 Найти ученика",
       "🔗 Назначить",
+      "➕ Учитель",
       "👥 Ученики",
       "👨‍🏫 Учителя",
       "🌐 Сайт",

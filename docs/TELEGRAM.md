@@ -1,85 +1,44 @@
 # Telegram-боты Lang Center
 
-Два бота:
+Три бота (одна БД, разные роли):
 
 | Бот | Для кого | Назначение |
 |-----|----------|------------|
-| **Admin** | владелец + администрация | заявки, логины/пароли, списки |
-| **Student** | ученики | запись, оценки, посещаемость, оплата |
+| **Admin** | владелец + администрация | заявки, поиск, назначение, **создать учителя** |
+| **Student** | ученики | пробный урок, регистрация, кабинет |
+| **Teacher** | учителя | **посещаемость и оценки** в Telegram (+ веб) |
 
-## 1. Создать ботов в Telegram
+## 1. Создать ботов в @BotFather
 
-1. Открой [@BotFather](https://t.me/BotFather)
-2. `/newbot` → имя например `Lang Center Admin` → username `langcenter_admin_bot`
-3. Сохрани **token**
-4. Ещё раз `/newbot` → `Lang Center Student` → `langcenter_student_bot`
-5. Сохрани второй **token**
+1. Admin → token → `TELEGRAM_ADMIN_BOT_TOKEN`
+2. Student → token → `TELEGRAM_STUDENT_BOT_TOKEN`
+3. Teacher → token → `TELEGRAM_TEACHER_BOT_TOKEN`
 
-## 2. SQL в Supabase
+## 2. SQL
 
-`supabase/TELEGRAM.sql` → SQL Editor → Run
+`supabase/TELEGRAM.sql` → Run  
+(есть `students.telegram_chat_id` и `teachers.telegram_chat_id`)
 
-## 3. Переменные на Vercel
+## 3. Env на Vercel
 
 ```
-TELEGRAM_ADMIN_BOT_TOKEN=123456:ABC...
-TELEGRAM_STUDENT_BOT_TOKEN=789012:XYZ...
-TELEGRAM_WEBHOOK_SECRET=любая_длинная_строка
+TELEGRAM_ADMIN_BOT_TOKEN=...
+TELEGRAM_STUDENT_BOT_TOKEN=...
+TELEGRAM_TEACHER_BOT_TOKEN=...
+TELEGRAM_WEBHOOK_SECRET=...
 APP_URL=https://langcenter-tillojon.vercel.app
+NEXT_PUBLIC_TG_STUDENT_BOT=username_без_@
+NEXT_PUBLIC_TG_ADMIN_BOT=...
+NEXT_PUBLIC_TG_TEACHER_BOT=...
 ```
 
-Опционально (кнопки на сайте):
+Redeploy → `POST /api/telegram/setup` с `x-setup-secret`.
 
-```
-NEXT_PUBLIC_TG_STUDENT_BOT=langcenter_student_bot
-NEXT_PUBLIC_TG_ADMIN_BOT=langcenter_admin_bot
-```
+## 4. Учитель в TG
 
-Опционально (chat id без /auth):
+1. Админ: **➕ Учитель** в admin-боте (или сайт)
+2. Учитель открывает teacher-бота
+3. `/login TCH-… пароль`
+4. **✅ Посещаемость** / **📊 Поставить оценку** / **👥 Мои ученики**
 
-```
-TELEGRAM_ADMIN_CHAT_IDS=123456789,987654321
-```
-
-После добавления env — **Redeploy**.
-
-## 4. Включить webhook
-
-После деплоя (подставь свой secret):
-
-```bash
-curl -X POST "https://langcenter-tillojon.vercel.app/api/telegram/setup" ^
-  -H "x-setup-secret: ТВОЙ_TELEGRAM_WEBHOOK_SECRET"
-```
-
-Или secret = `ADMIN_PASSWORD`, если `TELEGRAM_WEBHOOK_SECRET` не задан.
-
-## 5. Привязать админа
-
-1. Открой admin-бота в Telegram
-2. `/start`
-3. `/auth ВАШ_ADMIN_PASSWORD`
-4. Готово — новые заявки с `/register` приходят в этот чат
-
-## 6. Ученик (student-бот)
-
-### А) Заявка на пробный урок
-1. Кнопка **«📝 Пробный урок»** или `/trial`
-2. Имя → телефон → курс → дата → время
-3. Админу приходит заявка с кнопками **Принять / Отклонить**
-4. **Принять** → создаётся ученик, логин/пароль уходят ученику в TG
-5. **Отклонить** → ученику отказ
-
-### Б) Регистрация без заявки
-1. **«✍️ Регистрация»** или `/register`
-2. Имя → телефон → свой логин → пароль
-3. Аккаунт сразу создан и привязан к Telegram
-
-### В) Уже есть аккаунт
-`/login ЛОГИН пароль` → оценки / посещаемость / оплата
-
-## Проверка
-
-- GET `/api/telegram/admin/webhook` → `configured: true`
-- GET `/api/telegram/student/webhook` → `configured: true`
-- Регистрация на сайте → сообщение в admin-бот
+Веб-кабинет по-прежнему: `/teacher/login`

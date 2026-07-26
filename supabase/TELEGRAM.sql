@@ -8,10 +8,15 @@ CREATE TABLE IF NOT EXISTS telegram_admin_chats (
   linked_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
--- Link student cabinet to Telegram
+-- Link student / teacher cabinet to Telegram
 ALTER TABLE students ADD COLUMN IF NOT EXISTS telegram_chat_id BIGINT;
 CREATE INDEX IF NOT EXISTS idx_students_telegram_chat_id
   ON students(telegram_chat_id)
+  WHERE telegram_chat_id IS NOT NULL;
+
+ALTER TABLE teachers ADD COLUMN IF NOT EXISTS telegram_chat_id BIGINT;
+CREATE INDEX IF NOT EXISTS idx_teachers_telegram_chat_id
+  ON teachers(telegram_chat_id)
   WHERE telegram_chat_id IS NOT NULL;
 
 -- Multi-step dialogs (заявка / регистрация в боте)

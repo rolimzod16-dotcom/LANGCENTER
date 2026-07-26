@@ -26,6 +26,7 @@ export async function POST(request: NextRequest) {
   const secret = process.env.TELEGRAM_WEBHOOK_SECRET?.trim();
   const adminToken = process.env.TELEGRAM_ADMIN_BOT_TOKEN?.trim();
   const studentToken = process.env.TELEGRAM_STUDENT_BOT_TOKEN?.trim();
+  const teacherToken = process.env.TELEGRAM_TEACHER_BOT_TOKEN?.trim();
 
   const results: Record<string, unknown> = { base };
 
@@ -39,6 +40,7 @@ export async function POST(request: NextRequest) {
         { command: "pending", description: "Заявки на пробный урок" },
         { command: "find", description: "Найти ученика: /find Али" },
         { command: "assign", description: "Назначить учителя ученику" },
+        { command: "newteacher", description: "Создать учителя" },
         { command: "students", description: "Последние ученики" },
         { command: "teachers", description: "Учителя" },
         { command: "site", description: "Ссылки на сайт" },
@@ -71,6 +73,25 @@ export async function POST(request: NextRequest) {
     results.student = { skipped: "TELEGRAM_STUDENT_BOT_TOKEN not set" };
   }
 
+  if (teacherToken) {
+    const url = `${base}/api/telegram/teacher/webhook`;
+    results.teacher = {
+      webhook: await setWebhook(teacherToken, url, secret),
+      commands: await setMyCommands(teacherToken, [
+        { command: "start", description: "Старт / помощь" },
+        { command: "login", description: "/login TCH-… пароль" },
+        { command: "students", description: "Мои ученики" },
+        { command: "attendance", description: "Посещаемость сегодня" },
+        { command: "grade", description: "Поставить оценку" },
+        { command: "cancel", description: "Отменить" },
+        { command: "help", description: "Помощь" },
+      ]),
+      url,
+    };
+  } else {
+    results.teacher = { skipped: "TELEGRAM_TEACHER_BOT_TOKEN not set" };
+  }
+
   return NextResponse.json({ ok: true, results });
 }
 
@@ -80,5 +101,6 @@ export async function GET() {
     hint: "POST with header x-setup-secret to register webhooks",
     admin_configured: Boolean(process.env.TELEGRAM_ADMIN_BOT_TOKEN?.trim()),
     student_configured: Boolean(process.env.TELEGRAM_STUDENT_BOT_TOKEN?.trim()),
+    teacher_configured: Boolean(process.env.TELEGRAM_TEACHER_BOT_TOKEN?.trim()),
   });
 }
