@@ -81,13 +81,19 @@ export async function sendMessage(
     disable_web_page_preview?: boolean;
   },
 ) {
-  return tgApi(token, "sendMessage", {
-    chat_id: chatId,
-    text,
-    parse_mode: extra?.parse_mode ?? "HTML",
-    reply_markup: extra?.reply_markup,
-    disable_web_page_preview: extra?.disable_web_page_preview ?? true,
-  });
+  try {
+    return await tgApi(token, "sendMessage", {
+      chat_id: chatId,
+      text,
+      parse_mode: extra?.parse_mode ?? "HTML",
+      reply_markup: extra?.reply_markup,
+      disable_web_page_preview: extra?.disable_web_page_preview ?? true,
+    });
+  } catch (err) {
+    // Не валим весь webhook: чат мог удалить бота / тестовый id
+    console.error("sendMessage failed", chatId, err);
+    return null;
+  }
 }
 
 export async function answerCallback(
