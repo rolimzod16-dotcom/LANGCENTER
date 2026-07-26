@@ -49,6 +49,39 @@ const TIMES = [
   "19:30",
 ];
 
+/** Ближайшие 7 дней × удобные слоты (кнопки) */
+function buildTrialSlots(days = 7): Array<{ label: string; date: string; time: string; key: string }> {
+  const slots: Array<{ label: string; date: string; time: string; key: string }> = [];
+  const now = new Date();
+  const popular = ["10:30", "17:30", "18:30"];
+  for (let d = 0; d < days; d++) {
+    const day = new Date(now);
+    day.setDate(now.getDate() + d + (d === 0 ? 0 : 0));
+    // start from tomorrow if evening already passed for today
+    if (d === 0 && now.getHours() >= 18) continue;
+    const date = day.toISOString().slice(0, 10);
+    const dayLabel = day.toLocaleDateString("ru-RU", {
+      weekday: "short",
+      day: "2-digit",
+      month: "2-digit",
+    });
+    for (const time of popular) {
+      if (d === 0) {
+        const [hh] = time.split(":").map(Number);
+        if ((hh ?? 0) <= now.getHours()) continue;
+      }
+      const key = `${date}_${time}`;
+      slots.push({
+        label: `${dayLabel} ${time}`,
+        date,
+        time,
+        key,
+      });
+    }
+  }
+  return slots.slice(0, 18);
+}
+
 function studentKeyboard() {
   return replyKeyboard([
     ["📝 Пробный урок", "✍️ Регистрация"],
@@ -182,35 +215,35 @@ async function handleTrialState(
     return;
   }
 
-  if (state === "trial_date") {
+  // free-text date if user skipped buttons
+  if (state === "trial_slot") {
     const date = parseDate(text);
-    if (!date) {
-      await sendMessage(
-        token,
-        chatId,
-        "Дата в формате <code>ДД.ММ.ГГГГ</code> или «завтра» / «сегодня»",
-      );
+    if (date) {
+      await patchTgSession(chatId, "student", "trial_time", {
+        preferred_date: date,
+      });
+      const rows: { text: string; callback_data: string }[][] = [];
+      for (let i = 0; i < TIMES.length; i += 2) {
+        rows.push(
+          TIMES.slice(i, i + 2).map((t, j) => ({
+            text: t,
+            callback_data: `trial_time:${i + j}`,
+          })),
+        );
+      }
+      await sendMessage(token, chatId, "🕐 Выберите время:", {
+        reply_markup: inlineKeyboard(rows),
+      });
       return;
     }
-    await patchTgSession(chatId, "student", "trial_time", {
-      preferred_date: date,
-    });
-    const rows: { text: string; callback_data: string }[][] = [];
-    for (let i = 0; i < TIMES.length; i += 2) {
-      rows.push(
-        TIMES.slice(i, i + 2).map((t, j) => ({
-          text: t,
-          callback_data: `trial_time:${i + j}`,
-        })),
-      );
-    }
-    await sendMessage(token, chatId, "🕐 Выберите время:", {
-      reply_markup: inlineKeyboard(rows),
-    });
+    await sendMessage(
+      token,
+      chatId,
+      "Выберите слот кнопкой ниже или дату: <code>ДД.ММ.ГГГГ</code> / завтра",
+    );
     return;
   }
 
-  // free-text time fallback
   if (state === "trial_time") {
     await finishTrial(token, chatId, text, username);
   }
@@ -395,12 +428,47 @@ export async function handleStudentBotUpdate(update: TgUpdate): Promise<void> {
     if (data.startsWith("trial_course:")) {
       const idx = Number(data.split(":")[1]);
       const course = COURSES[idx] || COURSES[0]!;
-      await patchTgSession(chatId, "student", "trial_date", { course });
+      await patchTgSession(chatId, "student", "trial_slot", { course });
+      const slots = buildTrialSlots(7);
+      const rows: { text: string; callback_data: string }[][] = [];
+      for (let i = 0; i < slots.length; i += 2) {
+        rows.push(
+          slots.slice(i, i + 2).map((s) => ({
+            text: s.label,
+            // slot:YYYY-MM-DD_HH:MM — under 64 chars
+            callback_data: `trial_slot:${s.date}_${s.time}`,
+          })),
+        );
+      }
+      rows.push([{ text: "✏️ Своя дата", callback_data: "trial_custom_date" }]);
       await sendMessage(
         token,
         chatId,
-        `Курс: <b>${escapeHtml(course)}</b>\n\n📅 На какую дату? (ДД.ММ.ГГГГ / завтра / сегодня)`,
+        `Курс: <b>${escapeHtml(course)}</b>\n\n📅 Выберите <b>слот</b> пробного урока:`,
+        { reply_markup: inlineKeyboard(rows) },
       );
+      return;
+    }
+
+    if (data === "trial_custom_date") {
+      await patchTgSession(chatId, "student", "trial_slot", {});
+      await sendMessage(
+        token,
+        chatId,
+        "📅 Введите дату: <code>ДД.ММ.ГГГГ</code> / завтра / сегодня",
+      );
+      return;
+    }
+
+    if (data.startsWith("trial_slot:")) {
+      const raw = data.slice("trial_slot:".length);
+      const [date, time] = raw.split("_");
+      if (date && time) {
+        await patchTgSession(chatId, "student", "trial_time", {
+          preferred_date: date,
+        });
+        await finishTrial(token, chatId, time, username);
+      }
       return;
     }
 

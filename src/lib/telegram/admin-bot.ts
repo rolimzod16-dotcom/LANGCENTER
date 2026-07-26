@@ -26,6 +26,7 @@ import {
   getStudentBrief,
   getTeacherBrief,
   listActiveTeachers,
+  markStudentMonthPaid,
   searchStudents,
   studentResultKeyboard,
   teacherPickKeyboard,
@@ -338,28 +339,12 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
           `🔑 Логин: <code>${escapeHtml(res.app.login_code || "")}</code>`,
           `🔐 Пароль: <code>${escapeHtml(res.app.plain_password || "")}</code>`,
           `Ученику отправлено в Telegram.`,
-          ``,
-          `Теперь назначьте учителя 👇`,
         ].join("\n"),
-        studentId
-          ? {
-              reply_markup: inlineKeyboard([
-                [
-                  {
-                    text: "👨‍🏫 Назначить учителя",
-                    callback_data: `asg:s:${studentId}`,
-                  },
-                ],
-                [
-                  {
-                    text: "🔍 Найти другого ученика",
-                    callback_data: "asg:search",
-                  },
-                ],
-              ]),
-            }
-          : undefined,
       );
+      // сразу выбор учителя — без лишнего клика
+      if (studentId) {
+        await promptAssignTeacher(token, chatId, studentId);
+      }
       return;
     }
 
@@ -393,6 +378,30 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
         token,
         chatId,
         "🔍 Введите <b>имя</b>, <b>логин</b> или <b>телефон</b> ученика:",
+      );
+      return;
+    }
+
+    // pay:ok:{studentId}
+    if (data.startsWith("pay:ok:")) {
+      const studentId = data.slice("pay:ok:".length);
+      const res = await markStudentMonthPaid(studentId);
+      if (!res.ok) {
+        await answerCallback(token, cbId, "Ошибка");
+        await sendMessage(token, chatId, `⚠️ ${res.error}`);
+        return;
+      }
+      await answerCallback(token, cbId, "Оплачено");
+      const s = await getStudentBrief(studentId);
+      await sendMessage(
+        token,
+        chatId,
+        [
+          `💳 <b>Оплата отмечена</b>`,
+          `👤 ${escapeHtml(s?.full_name || "—")}`,
+          `Статус: <b>${escapeHtml(res.status)}</b>`,
+          `Сумма: ${res.amount_paid} / ${res.amount_due}`,
+        ].join("\n"),
       );
       return;
     }

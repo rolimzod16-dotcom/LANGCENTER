@@ -17,6 +17,22 @@ const playfair = Playfair_Display({
   display: "swap",
 });
 
+const CONTACT_PHONE =
+  process.env.NEXT_PUBLIC_CONTACT_PHONE?.trim() || "+992 90 100 04 44";
+const CONTACT_PHONE_TEL =
+  process.env.NEXT_PUBLIC_CONTACT_PHONE_TEL?.trim() ||
+  CONTACT_PHONE.replace(/[^\d+]/g, "");
+const CONTACT_EMAIL =
+  process.env.NEXT_PUBLIC_CONTACT_EMAIL?.trim() || "hello@langcenter.tj";
+const CONTACT_ADDRESS =
+  process.env.NEXT_PUBLIC_CONTACT_ADDRESS?.trim() || "г. Душанбе";
+const CONTACT_WHATSAPP =
+  process.env.NEXT_PUBLIC_CONTACT_WHATSAPP?.trim() ||
+  CONTACT_PHONE_TEL.replace(/^\+/, "");
+const TG_STUDENT = process.env.NEXT_PUBLIC_TG_STUDENT_BOT?.replace(/^@/, "");
+const TG_TEACHER = process.env.NEXT_PUBLIC_TG_TEACHER_BOT?.replace(/^@/, "");
+const TG_ADMIN = process.env.NEXT_PUBLIC_TG_ADMIN_BOT?.replace(/^@/, "");
+
 const courses = [
   { icon: "A", title: "English", desc: "Общий, разговорный, IELTS" },
   { icon: "文", title: "中文", desc: "Китайский для начинающих" },
@@ -86,8 +102,8 @@ export default function HomePage() {
             <a href="#contact">Контакты</a>
           </nav>
           <div className="mk-nav-actions">
-            <a className="mk-nav-phone" href="tel:+992900000000">
-              +992 90 000 00 00
+            <a className="mk-nav-phone" href={`tel:${CONTACT_PHONE_TEL}`}>
+              {CONTACT_PHONE}
             </a>
             <Link className="mk-nav-login" href="/register">
               Записаться
@@ -298,9 +314,27 @@ export default function HomePage() {
               <Link className="mk-btn mk-btn-light" href="/register">
                 Записаться онлайн →
               </Link>
-              <a className="mk-btn mk-btn-light" href="tel:+992900000000">
+              <a className="mk-btn mk-btn-light" href={`tel:${CONTACT_PHONE_TEL}`}>
                 Позвонить
               </a>
+              <a
+                className="mk-btn mk-btn-light"
+                href={`https://wa.me/${CONTACT_WHATSAPP}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                WhatsApp
+              </a>
+              {TG_STUDENT ? (
+                <a
+                  className="mk-btn mk-btn-light"
+                  href={`https://t.me/${TG_STUDENT}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Telegram
+                </a>
+              ) : null}
             </div>
           </div>
         </section>
@@ -317,9 +351,43 @@ export default function HomePage() {
             <small>Языковой центр, где знания становятся свободой.</small>
           </div>
           <div className="mk-foot-right">
-            г. Душанбе
+            {CONTACT_ADDRESS}
             <br />
-            +992 90 000 00 00 · hello@langcenter.tj
+            <a href={`tel:${CONTACT_PHONE_TEL}`}>{CONTACT_PHONE}</a>
+            {" · "}
+            <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>
+            <br />
+            <a
+              href={`https://wa.me/${CONTACT_WHATSAPP}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              WhatsApp
+            </a>
+            {TG_STUDENT ? (
+              <>
+                {" · "}
+                <a
+                  href={`https://t.me/${TG_STUDENT}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Ученикам
+                </a>
+              </>
+            ) : null}
+            {TG_TEACHER ? (
+              <>
+                {" · "}
+                <a
+                  href={`https://t.me/${TG_TEACHER}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Учителям
+                </a>
+              </>
+            ) : null}
             <br />
             <Link href="/register">Запись</Link>
             {" · "}

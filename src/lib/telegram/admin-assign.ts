@@ -102,6 +102,10 @@ export async function assignTeacherToStudent(
 ): Promise<{ ok: true; group_id: string } | { ok: false; error: string }> {
   try {
     const result = await assignStudentToTeacher(studentId, teacherId);
+    // fire-and-forget ping to teacher bot
+    void import("@/lib/telegram/notify-events").then((m) =>
+      m.notifyTeacherNewStudent(teacherId, studentId),
+    );
     return { ok: true, group_id: result.group_id };
   } catch (e) {
     return {
@@ -133,7 +137,86 @@ export function studentResultKeyboard(studentId: string) {
         callback_data: `asg:s:${studentId}`,
       },
     ],
+    [
+      {
+        text: "💳 Отметить оплату",
+        callback_data: `pay:ok:${studentId}`,
+      },
+    ],
   ]);
+}
+
+/** Оплатить текущий месяц за ученика (ensure + mark paid). */
+export async function markStudentMonthPaid(studentId: string): Promise<
+  | { ok: true; status: string; amount_paid: number; amount_due: number }
+  | { ok: false; error: string }
+> {
+  try {
+    const { ensureStudentPaymentForMonth, markPaymentPaid } = await import(
+      "@/lib/payments"
+    );
+    // ensure may return null if inactive / not started
+    let payment = await ensureStudentPaymentForMonth(studentId);
+    if (!payment?.id) {
+      // force create minimal invoice via direct upsert
+      const supabase = getSupabaseServerClient();
+      if (!supabase) return { ok: false, error: "БД не настроена" };
+      const period = new Date();
+      const period_month = `${period.getFullYear()}-${String(period.getMonth() + 1).padStart(2, "0")}-01`;
+      const due = `${period.getFullYear()}-${String(period.getMonth() + 1).padStart(2, "0")}-10`;
+      const { data, error } = await supabase
+        .from("student_payments")
+        .upsert(
+          {
+            student_id: studentId,
+            amount_due: 500000,
+            amount_paid: 0,
+            due_date: due,
+            status: "pending",
+            period_month,
+          },
+          { onConflict: "student_id,period_month" },
+        )
+        .select("id, amount_due, amount_paid, status")
+        .single();
+      if (error || !data?.id) {
+        return { ok: false, error: error?.message || "Нет счёта" };
+      }
+      const paid = await markPaymentPaid(data.id);
+      void import("@/lib/telegram/notify-events").then((m) =>
+        m.notifyStudentPayment({
+          student_id: studentId,
+          status: paid.status,
+          amount_paid: paid.amount_paid,
+        }),
+      );
+      return {
+        ok: true,
+        status: paid.status,
+        amount_paid: paid.amount_paid,
+        amount_due: paid.amount_due,
+      };
+    }
+    const paid = await markPaymentPaid(payment.id);
+    void import("@/lib/telegram/notify-events").then((m) =>
+      m.notifyStudentPayment({
+        student_id: studentId,
+        status: paid.status,
+        amount_paid: paid.amount_paid,
+      }),
+    );
+    return {
+      ok: true,
+      status: paid.status,
+      amount_paid: paid.amount_paid,
+      amount_due: paid.amount_due,
+    };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "Ошибка оплаты",
+    };
+  }
 }
 
 export function formatStudentCard(s: StudentHit, teacherName?: string | null) {
