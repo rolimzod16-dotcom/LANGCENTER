@@ -85,7 +85,7 @@ export async function createGroupForTeacher(input: {
 
   const { data: existing } = await supabase
     .from("groups")
-    .select("id, name, level, teacher_id")
+    .select("id, name, level, teacher_id, created_at")
     .eq("teacher_id", input.teacher_id)
     .ilike("name", name)
     .maybeSingle();
@@ -104,7 +104,7 @@ export async function createGroupForTeacher(input: {
   let { data, error } = await supabase
     .from("groups")
     .insert({ ...base, ...orgFields })
-    .select("id, name, level, teacher_id")
+    .select("id, name, level, teacher_id, created_at")
     .single();
 
   // organization_id column may not exist
@@ -112,7 +112,7 @@ export async function createGroupForTeacher(input: {
     const retry = await supabase
       .from("groups")
       .insert(base)
-      .select("id, name, level, teacher_id")
+      .select("id, name, level, teacher_id, created_at")
       .single();
     data = retry.data;
     error = retry.error;
