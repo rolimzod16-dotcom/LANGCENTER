@@ -289,7 +289,7 @@ async function finishTrial(
     await sendMessage(
       token,
       chatId,
-      `❌ Ошибка: ${e instanceof Error ? e.message : "неизвестно"}\n\nЗапустите supabase/TELEGRAM.sql если ещё не запускали.`,
+      `❌ Ошибка: ${e instanceof Error ? e.message : "неизвестно"}\n\nПроверьте, что база подключена.`,
     );
   }
 }

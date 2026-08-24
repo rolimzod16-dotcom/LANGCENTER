@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MobileShell } from "@/components/mobile/MobileShell";
-import { formatMoney } from "@/lib/payments";
+import { formatMoney } from "@/lib/money";
 
 const TABS = [
   { id: "home", label: "Главная", icon: "🏠" },

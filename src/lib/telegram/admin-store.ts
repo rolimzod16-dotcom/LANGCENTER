@@ -58,7 +58,7 @@ export async function linkAdminChat(
     return {
       ok: false,
       error:
-        "Таблица telegram_admin_chats не готова. Запусти supabase/TELEGRAM.sql",
+        "Таблица telegram_admin_chats не готова. База ещё не настроена.",
     };
   }
   return { ok: true };

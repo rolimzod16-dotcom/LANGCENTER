@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: lang-center
+    runtime: node
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_SUPABASE_URL
+        sync: false
+      - key: NEXT_PUBLIC_SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: SESSION_SECRET
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: TELEGRAM_ADMIN_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_STUDENT_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_TEACHER_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_WEBHOOK_SECRET
+        sync: false
+      - key: NEXT_PUBLIC_TG_ADMIN_BOT
+        sync: false
+      - key: NEXT_PUBLIC_TG_STUDENT_BOT
+        sync: false
+      - key: NEXT_PUBLIC_TG_TEACHER_BOT
+        sync: false

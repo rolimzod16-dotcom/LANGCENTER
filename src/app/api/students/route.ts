@@ -3,10 +3,11 @@ import {
   assignStudentToTeacher,
   getTeacherNamesByStudentIds,
 } from "@/lib/groups";
-import { ensureStudentPaymentForMonth } from "@/lib/payments";
 import {
   currentPeriodMonth,
+  ensureStudentPaymentForMonth,
   filterOwnerPayments,
+  getBillingCyclesForStudents,
   getOwnerPaymentsForMonth,
   type PaymentListFilter,
 } from "@/lib/payments";
@@ -73,19 +74,25 @@ export async function GET(request: NextRequest) {
       student_ids: studentIds,
     });
 
-    const teacherNames = await getTeacherNamesByStudentIds(
-      result.students.map((s) => s.id),
-    );
+    const ids = result.students.map((s) => s.id);
+    const periodMonth = currentPeriodMonth();
+
+    const [teacherNames, billingMap] = await Promise.all([
+      getTeacherNamesByStudentIds(ids),
+      getBillingCyclesForStudents(ids, periodMonth).catch(() => new Map()),
+    ]);
 
     const enriched = result.students.map((s) => ({
       ...s,
       teacher_name: teacherNames.get(s.id) ?? null,
+      billing: billingMap.get(s.id) ?? null,
     }));
 
     const summary = await getStudentsSummary();
 
     return NextResponse.json({
       students: enriched,
+      period_month: periodMonth,
       pagination: {
         total: result.total,
         page: result.page,
@@ -129,6 +136,8 @@ export async function POST(request: NextRequest) {
       ? Number(body.payment_due_day)
       : undefined;
 
+    const groupId = body.group_id ? String(body.group_id).trim() : undefined;
+
     const student = await createStudent({
       first_name: firstName,
       last_name: lastName,
@@ -139,7 +148,7 @@ export async function POST(request: NextRequest) {
       payment_due_day: paymentDueDay,
     });
 
-    await assignStudentToTeacher(student.id, teacherId);
+    await assignStudentToTeacher(student.id, teacherId, groupId);
 
     try {
       await ensureStudentPaymentForMonth(student.id);

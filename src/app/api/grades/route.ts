@@ -17,11 +17,13 @@ export async function POST(request: NextRequest) {
       score: Number(body.score),
       max_score: body.max_score ? Number(body.max_score) : 100,
       comment: body.comment ? String(body.comment) : undefined,
+      organization_id: session.org_id,
     });
 
     return NextResponse.json({ grade }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ошибка";
-    return NextResponse.json({ error: message }, { status: 500 });
+    const status = message.includes("не в ваших группах") ? 403 : 500;
+    return NextResponse.json({ error: message }, { status });
   }
 }

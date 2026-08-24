@@ -6,6 +6,19 @@ import {
 import { fetchAllStudentsRows } from "@/lib/students";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
+/** Lazy server-only org helpers — avoid pulling next/headers into client bundles. */
+async function resolveAdminOrgId(): Promise<string | null> {
+  const { getAdminOrgId } = await import("@/lib/org");
+  return getAdminOrgId();
+}
+
+async function resolveOrgInsertFields(
+  orgId?: string | null,
+): Promise<Record<string, string>> {
+  const { orgInsertFields } = await import("@/lib/org");
+  return orgInsertFields(orgId);
+}
+
 export type PaymentStatus = "pending" | "paid" | "partial" | "overdue";
 
 export type StudentPayment = {
@@ -34,6 +47,45 @@ export function dueDateFromPeriod(periodMonth: string, day = 10): string {
   const safeDay = Math.min(Math.max(day, 1), 28);
   return `${y}-${String(m).padStart(2, "0")}-${String(safeDay).padStart(2, "0")}`;
 }
+
+/** Следующий период: 2026-10-01 → 2026-11-01 */
+export function nextPeriodMonth(periodMonth: string): string {
+  const [y, m] = periodMonth.split("-").map(Number);
+  const d = new Date(y, m - 1, 1);
+  d.setMonth(d.getMonth() + 1);
+  return monthStart(d);
+}
+
+/** Предыдущий период */
+export function prevPeriodMonth(periodMonth: string): string {
+  const [y, m] = periodMonth.split("-").map(Number);
+  const d = new Date(y, m - 1, 1);
+  d.setMonth(d.getMonth() - 1);
+  return monthStart(d);
+}
+
+export type StudentBillingCycle = {
+  student_id: string;
+  payment_due_day: number;
+  /** Текущий месяц (YYYY-MM-01) */
+  period_month: string;
+  /** Срок оплаты текущего цикла, напр. 2026-10-10 */
+  due_date: string;
+  /** Следующий срок после оплаты, напр. 2026-11-10 */
+  next_due_date: string;
+  status: PaymentStatus | "new";
+  amount_due: number;
+  amount_paid: number;
+  debt: number;
+  has_invoice: boolean;
+  payment_id: string | null;
+  paid_at: string | null;
+  /** Можно нажать «Оплатил» */
+  can_mark_paid: boolean;
+  /** Можно нажать «Не оплатил» (сброс) */
+  can_mark_unpaid: boolean;
+  label: string;
+};
 
 export function studentStartedInPeriod(
   startDate: string | null,
@@ -99,8 +151,9 @@ function mapPayment(
 
 async function studentLookupMap(
   supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+  organizationId?: string | null,
 ) {
-  const { rows, schema } = await fetchAllStudentsRows(supabase);
+  const { rows, schema } = await fetchAllStudentsRows(supabase, organizationId);
   return new Map(
     rows.map((row) => {
       const student = mapRawStudent(row, schema);
@@ -151,18 +204,22 @@ export type PaginatedOwnerPayments = {
 
 async function buildOwnerPaymentsForMonth(
   periodMonth: string,
+  organizationId?: string | null,
 ): Promise<StudentPayment[]> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");
 
-  const { rows, schema } = await fetchAllStudentsRows(supabase);
+  const orgId =
+    organizationId === undefined ? await resolveAdminOrgId() : organizationId;
+
+  const { rows, schema } = await fetchAllStudentsRows(supabase, orgId);
   const students = rows
     .map((row) => ({ row, student: mapRawStudent(row, schema) }))
     .filter(({ student }) => student.is_active);
 
   let payments: StudentPayment[] = [];
   try {
-    payments = await listPaymentsForMonth(periodMonth);
+    payments = await listPaymentsForMonth(periodMonth, orgId);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "";
     if (!msg.includes("student_payments")) throw err;
@@ -274,12 +331,18 @@ export function summarizeOwnerPayments(
   };
 }
 
-export async function getOwnerPaymentsForMonth(periodMonth: string) {
-  return buildOwnerPaymentsForMonth(periodMonth);
+export async function getOwnerPaymentsForMonth(
+  periodMonth: string,
+  organizationId?: string | null,
+) {
+  return buildOwnerPaymentsForMonth(periodMonth, organizationId);
 }
 
-export async function getOwnerPaymentsSummary(periodMonth: string) {
-  const payments = await buildOwnerPaymentsForMonth(periodMonth);
+export async function getOwnerPaymentsSummary(
+  periodMonth: string,
+  organizationId?: string | null,
+) {
+  const payments = await buildOwnerPaymentsForMonth(periodMonth, organizationId);
   return summarizeOwnerPayments(payments);
 }
 
@@ -325,11 +388,17 @@ export async function getOwnerPaymentsPage(
   return paginateOwnerPayments(merged, query);
 }
 
-export async function listPaymentsForMonth(periodMonth: string) {
+export async function listPaymentsForMonth(
+  periodMonth: string,
+  organizationId?: string | null,
+) {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");
 
-  const { data, error } = await supabase
+  const orgId =
+    organizationId === undefined ? await resolveAdminOrgId() : organizationId;
+
+  let query = supabase
     .from("student_payments")
     .select(
       "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note",
@@ -337,9 +406,27 @@ export async function listPaymentsForMonth(periodMonth: string) {
     .eq("period_month", periodMonth)
     .order("due_date", { ascending: true });
 
+  if (orgId) {
+    query = query.eq("organization_id", orgId);
+  }
+
+  let { data, error } = await query;
+
+  if (error?.message.toLowerCase().includes("organization_id")) {
+    const fallback = await supabase
+      .from("student_payments")
+      .select(
+        "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note",
+      )
+      .eq("period_month", periodMonth)
+      .order("due_date", { ascending: true });
+    data = fallback.data;
+    error = fallback.error;
+  }
+
   if (error) throw new Error(error.message);
 
-  const students = await studentLookupMap(supabase);
+  const students = await studentLookupMap(supabase, orgId);
   return (data ?? []).map((row) =>
     mapPayment(row as PaymentDbRow, students.get(row.student_id)),
   );
@@ -349,7 +436,9 @@ export async function generateMonthlyPayments(periodMonth: string) {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");
 
-  const students = await studentLookupMap(supabase);
+  const orgId = await resolveAdminOrgId();
+  const orgFields = await resolveOrgInsertFields(orgId);
+  const students = await studentLookupMap(supabase, orgId);
   const rows = [...students.entries()]
     .filter(([, student]) => student.is_active)
     .filter(([, student]) =>
@@ -364,6 +453,7 @@ export async function generateMonthlyPayments(periodMonth: string) {
         due_date: dueDateFromPeriod(periodMonth, dueDay),
         status: "pending" as const,
         period_month: periodMonth,
+        ...orgFields,
       };
     });
 
@@ -375,7 +465,26 @@ export async function generateMonthlyPayments(periodMonth: string) {
       onConflict: "student_id,period_month",
       ignoreDuplicates: true,
     });
-    if (!error) created += batch.length;
+    if (!error) {
+      created += batch.length;
+      continue;
+    }
+    // retry without organization_id if column missing
+    if (error.message.toLowerCase().includes("organization_id")) {
+      const stripped = batch.map((row) => {
+        const copy = { ...row } as Record<string, unknown>;
+        delete copy.organization_id;
+        return copy;
+      });
+      const retry = await supabase.from("student_payments").upsert(stripped, {
+        onConflict: "student_id,period_month",
+        ignoreDuplicates: true,
+      });
+      if (!retry.error) created += stripped.length;
+      else throw new Error(retry.error.message);
+    } else {
+      throw new Error(error.message);
+    }
   }
 
   return { created, total: rows.length };
@@ -388,7 +497,9 @@ export async function ensureStudentPaymentForMonth(
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");
 
-  const students = await studentLookupMap(supabase);
+  const orgId = await resolveAdminOrgId();
+  const orgFields = await resolveOrgInsertFields(orgId);
+  const students = await studentLookupMap(supabase, orgId);
   const student = students.get(studentId);
   if (!student?.is_active) return null;
   if (!studentStartedInPeriod(student.start_date, periodMonth)) return null;
@@ -396,26 +507,330 @@ export async function ensureStudentPaymentForMonth(
   const dueDay = Number(student.payment_due_day ?? 10);
   const dueDate = dueDateFromPeriod(periodMonth, dueDay);
 
-  const { data: payment, error: upsertError } = await supabase
+  // Уже есть счёт — не перезаписываем (иначе сбросится «оплатил»)
+  const existing = await supabase
     .from("student_payments")
-    .upsert(
-      {
-        student_id: studentId,
-        amount_due: student.monthly_fee,
-        amount_paid: 0,
-        due_date: dueDate,
-        status: "pending",
-        period_month: periodMonth,
-      },
-      { onConflict: "student_id,period_month" },
+    .select(
+      "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note",
     )
+    .eq("student_id", studentId)
+    .eq("period_month", periodMonth)
+    .maybeSingle();
+
+  if (!existing.error && existing.data) {
+    return mapPayment(existing.data as PaymentDbRow, student);
+  }
+
+  const payload = {
+    student_id: studentId,
+    amount_due: student.monthly_fee,
+    amount_paid: 0,
+    due_date: dueDate,
+    status: "pending",
+    period_month: periodMonth,
+    ...orgFields,
+  };
+
+  let { data: payment, error: insertError } = await supabase
+    .from("student_payments")
+    .insert(payload)
     .select(
       "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note",
     )
     .single();
 
-  if (upsertError) throw new Error(upsertError.message);
+  if (insertError?.message.toLowerCase().includes("organization_id")) {
+    const rest = { ...payload } as Record<string, unknown>;
+    delete rest.organization_id;
+    const retry = await supabase
+      .from("student_payments")
+      .insert(rest)
+      .select(
+        "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note",
+      )
+      .single();
+    payment = retry.data;
+    insertError = retry.error;
+  }
+
+  // race: already created
+  if (insertError?.code === "23505" || insertError?.message.includes("duplicate")) {
+    const again = await supabase
+      .from("student_payments")
+      .select(
+        "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note",
+      )
+      .eq("student_id", studentId)
+      .eq("period_month", periodMonth)
+      .single();
+    if (again.error) throw new Error(again.error.message);
+    return mapPayment(again.data as PaymentDbRow, student);
+  }
+
+  if (insertError) throw new Error(insertError.message);
   return mapPayment(payment as PaymentDbRow, student);
+}
+
+function billingLabel(
+  status: PaymentStatus | "new",
+  dueDate: string,
+  nextDue: string,
+): string {
+  if (status === "paid") return `Оплатил · след. ${formatDateShort(nextDue)}`;
+  if (status === "overdue") return `Просрочено · срок ${formatDateShort(dueDate)}`;
+  if (status === "partial") return `Частично · срок ${formatDateShort(dueDate)}`;
+  if (status === "new") return `Нет счёта · срок ${formatDateShort(dueDate)}`;
+  return `Не оплатил · срок ${formatDateShort(dueDate)}`;
+}
+
+function formatDateShort(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return `${d}.${m}.${y}`;
+}
+
+function buildBillingCycle(
+  studentId: string,
+  dueDay: number,
+  periodMonth: string,
+  payment: StudentPayment | null,
+  fee: number,
+): StudentBillingCycle {
+  const dueDate = payment?.due_date ?? dueDateFromPeriod(periodMonth, dueDay);
+  const nextDue = dueDateFromPeriod(nextPeriodMonth(periodMonth), dueDay);
+  const amountDue = payment?.amount_due ?? fee;
+  const amountPaid = payment?.amount_paid ?? 0;
+  const status: PaymentStatus | "new" = !payment
+    ? computeStatus(amountDue, 0, dueDate) === "overdue"
+      ? "overdue"
+      : "new"
+    : payment.status;
+  const hasInvoice = Boolean(payment?.has_invoice);
+  const isPaid = status === "paid";
+
+  return {
+    student_id: studentId,
+    payment_due_day: dueDay,
+    period_month: periodMonth,
+    due_date: dueDate,
+    next_due_date: nextDue,
+    status,
+    amount_due: amountDue,
+    amount_paid: amountPaid,
+    debt: Math.max(0, amountDue - amountPaid),
+    has_invoice: hasInvoice,
+    payment_id: payment?.id ?? null,
+    paid_at: payment?.paid_at ?? null,
+    can_mark_paid: !isPaid,
+    can_mark_unpaid: isPaid || amountPaid > 0,
+    label: billingLabel(status, dueDate, nextDue),
+  };
+}
+
+/**
+ * Статусы оплаты текущего месяца для списка учеников (batch).
+ * Цикл: день оплаты N → после «Оплатил» следующий срок N-е число след. месяца.
+ */
+async function studentMetaByIds(
+  supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+  studentIds: string[],
+) {
+  type Meta = {
+    name: string;
+    code: string;
+    start_date: string | null;
+    payment_due_day: number | null;
+    is_active: boolean;
+    monthly_fee: number;
+  };
+  const map = new Map<string, Meta>();
+  if (!studentIds.length) return map;
+
+  const chunkSize = 100;
+  for (let i = 0; i < studentIds.length; i += chunkSize) {
+    const chunk = studentIds.slice(i, i + chunkSize);
+    for (const select of [
+      "id, full_name, student_code, start_date, payment_due_day, status, monthly_fee",
+      "id, first_name, last_name, student_code, is_active, monthly_fee",
+    ]) {
+      const { data, error } = await supabase
+        .from("students")
+        .select(select)
+        .in("id", chunk);
+      if (error) continue;
+      for (const raw of data ?? []) {
+        const row = raw as unknown as {
+          id: string;
+          full_name?: string;
+          first_name?: string;
+          last_name?: string;
+          student_code: string;
+          start_date?: string | null;
+          payment_due_day?: number | null;
+          status?: string | null;
+          is_active?: boolean | null;
+          monthly_fee?: number | null;
+        };
+        const name =
+          row.full_name?.trim() ||
+          `${row.last_name ?? ""} ${row.first_name ?? ""}`.trim() ||
+          row.student_code;
+        map.set(row.id, {
+          name,
+          code: row.student_code,
+          start_date: row.start_date ?? null,
+          payment_due_day: row.payment_due_day ?? 10,
+          is_active:
+            row.status !== undefined
+              ? row.status === "active"
+              : (row.is_active ?? true),
+          monthly_fee: Number(row.monthly_fee ?? 500000),
+        });
+      }
+      break;
+    }
+  }
+  return map;
+}
+
+export async function getBillingCyclesForStudents(
+  studentIds: string[],
+  periodMonth = currentPeriodMonth(),
+): Promise<Map<string, StudentBillingCycle>> {
+  const map = new Map<string, StudentBillingCycle>();
+  if (!studentIds.length) return map;
+
+  const supabase = getSupabaseServerClient();
+  if (!supabase) return map;
+
+  const students = await studentMetaByIds(supabase, studentIds);
+
+  const paymentsByStudent = new Map<string, StudentPayment>();
+  const chunkSize = 100;
+  for (let i = 0; i < studentIds.length; i += chunkSize) {
+    const chunk = studentIds.slice(i, i + chunkSize);
+    const { data, error } = await supabase
+      .from("student_payments")
+      .select(
+        "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note",
+      )
+      .eq("period_month", periodMonth)
+      .in("student_id", chunk);
+
+    if (error) {
+      if (error.message.includes("student_payments")) break;
+      continue;
+    }
+    for (const row of data ?? []) {
+      const meta = students.get(row.student_id);
+      paymentsByStudent.set(
+        row.student_id,
+        mapPayment(row as PaymentDbRow, meta),
+      );
+    }
+  }
+
+  for (const id of studentIds) {
+    const meta = students.get(id);
+    const dueDay = Number(meta?.payment_due_day ?? 10);
+    const fee = Number(meta?.monthly_fee ?? 500000);
+    const payment = paymentsByStudent.get(id) ?? null;
+    map.set(id, buildBillingCycle(id, dueDay, periodMonth, payment, fee));
+  }
+
+  return map;
+}
+
+/**
+ * Офлайн-касса: отметить ученика «Оплатил» / «Не оплатил» за текущий цикл.
+ * После «Оплатил» автоматически готовится счёт на следующий месяц (след. N-е число).
+ */
+export async function setStudentCashStatus(
+  studentId: string,
+  action: "paid" | "unpaid",
+  periodMonth = currentPeriodMonth(),
+): Promise<{
+  billing: StudentBillingCycle;
+  payment: StudentPayment;
+  next_payment: StudentPayment | null;
+}> {
+  const ensured = await ensureStudentPaymentForMonth(studentId, periodMonth);
+  if (!ensured?.id) {
+    throw new Error("Не удалось создать счёт за месяц");
+  }
+
+  let payment: StudentPayment;
+  if (action === "paid") {
+    payment = await markPaymentPaid(ensured.id);
+    // Авто: следующий месяц — «Не оплатил», срок = то же число (+1 месяц)
+    let nextPayment: StudentPayment | null = null;
+    try {
+      nextPayment = await ensureStudentPaymentForMonth(
+        studentId,
+        nextPeriodMonth(periodMonth),
+      );
+    } catch {
+      nextPayment = null;
+    }
+
+    const cycles = await getBillingCyclesForStudents([studentId], periodMonth);
+    return {
+      billing: cycles.get(studentId)!,
+      payment,
+      next_payment: nextPayment,
+    };
+  }
+
+  // unpaid — сброс текущего месяца
+  payment = await markPaymentUnpaid(ensured.id);
+  const cycles = await getBillingCyclesForStudents([studentId], periodMonth);
+  return {
+    billing: cycles.get(studentId)!,
+    payment,
+    next_payment: null,
+  };
+}
+
+export async function markPaymentUnpaid(paymentId: string): Promise<StudentPayment> {
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase не настроен");
+
+  const { data, error } = await supabase
+    .from("student_payments")
+    .update({
+      amount_paid: 0,
+      paid_at: null,
+      status: "pending",
+    })
+    .eq("id", paymentId)
+    .select(
+      "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note",
+    )
+    .single();
+
+  if (error) throw new Error(error.message);
+
+  const orgId = await resolveAdminOrgId();
+  const students = await studentLookupMap(supabase, orgId);
+  const mapped = mapPayment(data as PaymentDbRow, students.get(data.student_id));
+
+  // recompute overdue if due date passed
+  const status = computeStatus(mapped.amount_due, 0, mapped.due_date);
+  if (status !== "pending") {
+    await supabase
+      .from("student_payments")
+      .update({ status })
+      .eq("id", paymentId);
+    mapped.status = status;
+  }
+
+  await supabase.from("payment_events").insert({
+    payment_id: paymentId,
+    actor: "admin",
+    action: "unpaid",
+    amount: 0,
+  });
+
+  return mapped;
 }
 
 export async function markPaymentPaid(paymentId: string, amountPaid?: number) {
@@ -424,12 +839,39 @@ export async function markPaymentPaid(paymentId: string, amountPaid?: number) {
 
   const { data: existing, error: fetchError } = await supabase
     .from("student_payments")
-    .select("amount_due")
+    .select("amount_due, organization_id")
     .eq("id", paymentId)
     .single();
 
-  if (fetchError) throw new Error(fetchError.message);
+  if (fetchError) {
+    if (fetchError.message.toLowerCase().includes("organization_id")) {
+      const retry = await supabase
+        .from("student_payments")
+        .select("amount_due")
+        .eq("id", paymentId)
+        .single();
+      if (retry.error) throw new Error(retry.error.message);
+      return markPaymentPaidCore(supabase, paymentId, amountPaid, retry.data, null);
+    }
+    throw new Error(fetchError.message);
+  }
 
+  return markPaymentPaidCore(
+    supabase,
+    paymentId,
+    amountPaid,
+    existing,
+    (existing as { organization_id?: string | null }).organization_id ?? null,
+  );
+}
+
+async function markPaymentPaidCore(
+  supabase: NonNullable<ReturnType<typeof getSupabaseServerClient>>,
+  paymentId: string,
+  amountPaid: number | undefined,
+  existing: { amount_due: number },
+  organizationId: string | null,
+) {
   const paid = amountPaid ?? Number(existing.amount_due);
   const status = paid >= Number(existing.amount_due) ? "paid" : "partial";
 
@@ -447,8 +889,32 @@ export async function markPaymentPaid(paymentId: string, amountPaid?: number) {
     .single();
 
   if (error) throw new Error(error.message);
-  const students = await studentLookupMap(supabase);
-  return mapPayment(data as PaymentDbRow, students.get(data.student_id));
+
+  // audit log (optional table — ignore if migration not applied)
+  await supabase.from("payment_events").insert({
+    payment_id: paymentId,
+    organization_id: organizationId,
+    actor: "admin",
+    action: status === "paid" ? "paid" : "partial",
+    amount: paid,
+  });
+
+  const students = await studentLookupMap(supabase, organizationId);
+  const mapped = mapPayment(data as PaymentDbRow, students.get(data.student_id));
+
+  // Авто-цикл: после полной оплаты готовим счёт на след. месяц (N-е число + 1 мес)
+  if (status === "paid" && data.student_id && data.period_month) {
+    try {
+      await ensureStudentPaymentForMonth(
+        data.student_id,
+        nextPeriodMonth(String(data.period_month).slice(0, 10)),
+      );
+    } catch {
+      // next period optional if schema incomplete
+    }
+  }
+
+  return mapped;
 }
 
 export function periodMonthFromDate(date: string): string {
@@ -472,8 +938,9 @@ export async function listPaymentsReceivedOnDate(date: string) {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");
 
+  const orgId = await resolveAdminOrgId();
   const end = nextDayIso(date);
-  const { data, error } = await supabase
+  let query = supabase
     .from("student_payments")
     .select(
       "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note",
@@ -483,8 +950,25 @@ export async function listPaymentsReceivedOnDate(date: string) {
     .gt("amount_paid", 0)
     .order("paid_at", { ascending: false });
 
+  if (orgId) query = query.eq("organization_id", orgId);
+
+  let { data, error } = await query;
+  if (error?.message.toLowerCase().includes("organization_id")) {
+    const fallback = await supabase
+      .from("student_payments")
+      .select(
+        "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note",
+      )
+      .gte("paid_at", `${date}T00:00:00.000Z`)
+      .lt("paid_at", `${end}T00:00:00.000Z`)
+      .gt("amount_paid", 0)
+      .order("paid_at", { ascending: false });
+    data = fallback.data;
+    error = fallback.error;
+  }
+
   if (error) throw new Error(error.message);
-  const students = await studentLookupMap(supabase);
+  const students = await studentLookupMap(supabase, orgId);
   return (data ?? []).map((row) =>
     mapPayment(row as PaymentDbRow, students.get(row.student_id)),
   );
@@ -547,26 +1031,96 @@ export function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-export function formatMoney(amount: number): string {
-  return new Intl.NumberFormat("ru-RU").format(Math.round(amount)) + " сум";
-}
+export { formatMoney } from "@/lib/money";
 
+/** Точечный статус оплаты одного ученика — без загрузки всего месяца. */
 export async function getStudentPaymentStatus(
   studentId: string,
   periodMonth = currentPeriodMonth(),
 ) {
-  const payments = await buildOwnerPaymentsForMonth(periodMonth);
-  const payment = payments.find((p) => p.student_id === studentId);
-  if (!payment) return null;
+  const supabase = getSupabaseServerClient();
+  if (!supabase) throw new Error("Supabase не настроен");
 
-  const debt = Math.max(0, payment.amount_due - payment.amount_paid);
-  return {
-    amount_due: payment.amount_due,
-    amount_paid: payment.amount_paid,
-    due_date: payment.due_date,
-    status: payment.status,
-    debt,
-    has_invoice: payment.has_invoice,
-    period_month: payment.period_month,
-  };
+  const { data: payment, error } = await supabase
+    .from("student_payments")
+    .select(
+      "id, student_id, amount_due, amount_paid, due_date, paid_at, status, period_month, note",
+    )
+    .eq("student_id", studentId)
+    .eq("period_month", periodMonth)
+    .maybeSingle();
+
+  if (error && !error.message.includes("student_payments")) {
+    throw new Error(error.message);
+  }
+
+  if (payment) {
+    const amountDue = Number(payment.amount_due);
+    const amountPaid = Number(payment.amount_paid);
+    const status = computeStatus(amountDue, amountPaid, payment.due_date);
+    return {
+      amount_due: amountDue,
+      amount_paid: amountPaid,
+      due_date: payment.due_date,
+      status,
+      debt: Math.max(0, amountDue - amountPaid),
+      has_invoice: true,
+      period_month: payment.period_month,
+    };
+  }
+
+  // Virtual invoice from student profile
+  for (const select of [
+    "monthly_fee, start_date, payment_due_day, status",
+    "monthly_fee, is_active",
+    "id",
+  ]) {
+    const { data: student, error: sErr } = await supabase
+      .from("students")
+      .select(select)
+      .eq("id", studentId)
+      .maybeSingle();
+
+    if (sErr) {
+      if (isSchemaish(sErr.message)) continue;
+      throw new Error(sErr.message);
+    }
+    if (!student) return null;
+
+    const row = student as {
+      monthly_fee?: number | null;
+      start_date?: string | null;
+      payment_due_day?: number | null;
+      status?: string | null;
+      is_active?: boolean | null;
+    };
+
+    const active =
+      row.status !== undefined
+        ? row.status === "active"
+        : (row.is_active ?? true);
+    if (!active) return null;
+    if (!studentStartedInPeriod(row.start_date ?? null, periodMonth)) return null;
+
+    const fee = Number(row.monthly_fee ?? 500000);
+    const dueDay = Number(row.payment_due_day ?? 10);
+    const dueDate = dueDateFromPeriod(periodMonth, dueDay);
+    const status = computeStatus(fee, 0, dueDate);
+    return {
+      amount_due: fee,
+      amount_paid: 0,
+      due_date: dueDate,
+      status,
+      debt: fee,
+      has_invoice: false,
+      period_month: periodMonth,
+    };
+  }
+
+  return null;
+}
+
+function isSchemaish(message: string): boolean {
+  const lower = message.toLowerCase();
+  return lower.includes("column") || lower.includes("does not exist");
 }

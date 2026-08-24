@@ -17,6 +17,10 @@ export default function AdminTeachersPage() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
+  const [groupName, setGroupName] = useState("");
+  const [extraGroupTeacher, setExtraGroupTeacher] = useState("");
+  const [extraGroupName, setExtraGroupName] = useState("");
+  const [extraLoading, setExtraLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [credentials, setCredentials] = useState<{
@@ -44,7 +48,7 @@ export default function AdminTeachersPage() {
       data.error ??
         (res.status === 401
           ? "Нет доступа. Войдите в админку заново."
-          : "Не удалось загрузить учителей. Запустите supabase/TEACHERS.sql в Supabase."),
+          : "Не удалось загрузить учителей. Проверьте подключение к базе."),
     );
   };
 
@@ -66,6 +70,7 @@ export default function AdminTeachersPage() {
           first_name,
           last_name,
           phone: phone || undefined,
+          group_name: groupName.trim() || undefined,
         }),
       });
       const data = await res.json();
@@ -76,6 +81,7 @@ export default function AdminTeachersPage() {
       });
       setFullName("");
       setPhone("");
+      setGroupName("");
       load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Ошибка");
@@ -151,6 +157,15 @@ export default function AdminTeachersPage() {
               placeholder="+998..."
             />
           </div>
+          <div>
+            <label className="lc-label">Название первой группы</label>
+            <input
+              value={groupName}
+              onChange={(e) => setGroupName(e.target.value)}
+              className="lc-input"
+              placeholder="Напр. A1 Утро (необязательно)"
+            />
+          </div>
           {error && <p className="lc-alert lc-alert-error">{error}</p>}
           <button
             type="submit"
@@ -160,6 +175,77 @@ export default function AdminTeachersPage() {
             {loading ? "Создание…" : "Добавить учителя"}
           </button>
         </form>
+
+        {teachers.length > 0 && (
+          <form
+            className="lc-card mb-8 space-y-4 p-6"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!extraGroupTeacher || !extraGroupName.trim()) return;
+              setExtraLoading(true);
+              setError("");
+              try {
+                const res = await fetch("/api/groups", {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  credentials: "include",
+                  body: JSON.stringify({
+                    teacher_id: extraGroupTeacher,
+                    name: extraGroupName.trim(),
+                  }),
+                });
+                const data = await res.json();
+                if (!res.ok) throw new Error(data.error || "Ошибка");
+                setExtraGroupName("");
+                alert(`Группа «${data.group.name}» создана`);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : "Ошибка");
+              } finally {
+                setExtraLoading(false);
+              }
+            }}
+          >
+            <h2 className="text-base font-bold text-slate-900">
+              Добавить ещё группу учителю
+            </h2>
+            <p className="text-sm text-slate-500">
+              Один учитель может вести несколько групп (A1, A2, Kids…).
+            </p>
+            <div>
+              <label className="lc-label">Учитель *</label>
+              <select
+                value={extraGroupTeacher}
+                onChange={(e) => setExtraGroupTeacher(e.target.value)}
+                required
+                className="lc-input"
+              >
+                <option value="">— выберите —</option>
+                {teachers.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.full_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="lc-label">Название группы *</label>
+              <input
+                value={extraGroupName}
+                onChange={(e) => setExtraGroupName(e.target.value)}
+                required
+                className="lc-input"
+                placeholder="A2 Вечер"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={extraLoading}
+              className="lc-btn lc-btn-ghost px-5 py-2.5 disabled:opacity-50"
+            >
+              {extraLoading ? "Создание…" : "Создать группу"}
+            </button>
+          </form>
+        )}
 
         <h2 className="mb-2 text-lg font-bold text-slate-900">
           Список ({teachers.length})

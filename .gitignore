@@ -46,3 +46,9 @@ next-env.d.ts
 
 .vercel
 .env*
+
+# local supabase CLI binary
+.tools/
+
+# generated audit output
+scripts/*-report.json

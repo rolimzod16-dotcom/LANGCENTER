@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { OrgSwitcher } from "@/components/admin/OrgSwitcher";
 import { AppShell } from "@/components/layout/AppShell";
-import { formatMoney } from "@/lib/payments";
+import { formatMoney } from "@/lib/money";
 
 type Dashboard = {
   teachers_active: number;
@@ -44,6 +45,9 @@ export default function AdminPage() {
       title="Панель владельца"
       subtitle="Сводка, ученики, учителя и финансы"
     >
+      <div className="mb-6 max-w-sm">
+        <OrgSwitcher />
+      </div>
       <div className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <div className="lc-card border-indigo-100 bg-gradient-to-br from-indigo-50 to-white p-5">
           <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">

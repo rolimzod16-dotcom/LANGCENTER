@@ -580,7 +580,7 @@ export async function createStudent(input: {
         }
         if (lower.includes("phone")) {
           throw new Error(
-            "Телефон уже занят. Запусти supabase/UPGRADE_CREDENTIALS.sql",
+            "Телефон уже занят",
           );
         }
         throw new Error(msg);
@@ -671,7 +671,7 @@ export async function createStudent(input: {
     );
   }
 
-  // Best-effort extras (колонок может не быть, пока не запущен UPGRADE_CREDENTIALS.sql)
+  // Best-effort extras (колонок может не быть в схеме)
   const extras: Record<string, unknown> = {
     password_plain: plainPassword,
   };

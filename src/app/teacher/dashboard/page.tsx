@@ -107,18 +107,34 @@ export default function TeacherDashboardPage() {
     setMarkingAll(true);
     setError("");
     setSuccess("");
-    for (const student of students) {
-      if (todayAttendance[student.id] === "present") continue;
-      await fetch("/api/attendance", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        credentials: "same-origin",
-        body: JSON.stringify({ student_id: student.id, status: "present" }),
-      });
-      setTodayAttendance((prev) => ({ ...prev, [student.id]: "present" }));
+    const ids = students
+      .filter((s) => todayAttendance[s.id] !== "present")
+      .map((s) => s.id);
+    if (ids.length === 0) {
+      setMarkingAll(false);
+      setSuccess("Все уже отмечены");
+      return;
     }
+    const res = await fetch("/api/attendance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: JSON.stringify({ student_ids: ids, status: "present" }),
+    });
+    const data = await res.json();
     setMarkingAll(false);
-    setSuccess("Все отмечены как пришли");
+    if (!res.ok) {
+      setError(data.error ?? "Ошибка массовой отметки");
+      return;
+    }
+    setTodayAttendance((prev) => {
+      const next = { ...prev };
+      for (const id of data.student_ids ?? ids) {
+        next[id] = "present";
+      }
+      return next;
+    });
+    setSuccess(`Все отмечены как пришли (${data.marked ?? ids.length})`);
   }
 
   async function submitGrade(e: React.FormEvent) {

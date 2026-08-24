@@ -79,21 +79,11 @@ export type OwnerDailyReport = {
 };
 
 async function studentCounts() {
-  const supabase = getSupabaseServerClient();
-  if (!supabase) throw new Error("Supabase не настроен");
-
-  const { count: totalStudents } = await supabase
-    .from("students")
-    .select("id", { count: "exact", head: true });
-
-  const { count: activeStudents } = await supabase
-    .from("students")
-    .select("id", { count: "exact", head: true })
-    .eq("status", "active");
-
+  const { getStudentsSummary } = await import("@/lib/students");
+  const summary = await getStudentsSummary();
   return {
-    total_students: totalStudents ?? 0,
-    active_students: activeStudents ?? 0,
+    total_students: summary.total,
+    active_students: summary.active,
   };
 }
 

@@ -23,7 +23,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await setSession("student", student.id);
+    await setSession("student", student.id, student.organization_id ?? null);
     return NextResponse.json({ student });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ошибка входа";

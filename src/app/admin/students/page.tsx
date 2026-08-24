@@ -375,8 +375,7 @@ export default function AdminStudentsPage() {
             {listError}
             {listError.includes("column") && (
               <p className="mt-2 text-sm">
-                Запустите <code className="rounded bg-red-100 px-1">supabase/FIX_SCHEMA_CLEAN.sql</code>{" "}
-                в Supabase SQL Editor
+                Схема базы не совпадает с приложением. Нужно накатить чистую схему на новый проект Supabase.
               </p>
             )}
           </div>

@@ -14,9 +14,9 @@
 2. Student → token → `TELEGRAM_STUDENT_BOT_TOKEN`
 3. Teacher → token → `TELEGRAM_TEACHER_BOT_TOKEN`
 
-## 2. SQL
+## 2. База
 
-`supabase/TELEGRAM.sql` → Run  
+`supabase/schema.sql` → SQL Editor нового проекта → Run
 (есть `students.telegram_chat_id` и `teachers.telegram_chat_id`)
 
 ## 3. Env на Vercel

@@ -54,7 +54,8 @@ export function CredentialsCard({ title, code, password, onClose }: Props) {
         </div>
       </div>
       <p className="mt-4 text-sm text-emerald-800">
-        Сохраните данные и передайте пользователю. Пароль больше не отобразится.
+        Логин и пароль всегда доступны в карточке ученика в списке. Можно
+        скопировать и передать.
       </p>
       <div className="mt-4 flex flex-wrap gap-2">
         <button

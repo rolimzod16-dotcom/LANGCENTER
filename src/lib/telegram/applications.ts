@@ -41,7 +41,7 @@ export async function createTrialApplication(input: {
   preferred_time?: string;
 }): Promise<TrialApplication> {
   const supabase = getSupabaseServerClient();
-  if (!supabase) throw new Error("БД не настроена. Запусти supabase/TELEGRAM.sql");
+  if (!supabase) throw new Error("БД не настроена");
 
   const { data, error } = await supabase
     .from("trial_applications")

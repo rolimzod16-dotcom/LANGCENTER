@@ -4,7 +4,7 @@ import { Suspense, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { AdminSubLayout } from "@/components/layout/AdminSubLayout";
-import { formatMoney } from "@/lib/payments";
+import { formatMoney } from "@/lib/money";
 
 type Payment = {
   id: string | null;
@@ -518,9 +518,7 @@ function OwnerReportsPage() {
           {error}
           {error.includes("student_payments") && (
             <p className="mt-2 text-sm">
-              Запустите{" "}
-              <code className="rounded bg-red-100 px-1">supabase/PAYMENTS.sql</code>{" "}
-              в Supabase SQL Editor
+              Таблица платежей ещё не создана. Схема накатывается на новый проект Supabase.
             </p>
           )}
         </div>
