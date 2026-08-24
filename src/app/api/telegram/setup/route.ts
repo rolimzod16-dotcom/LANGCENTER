@@ -41,6 +41,7 @@ export async function POST(request: NextRequest) {
         { command: "find", description: "Найти ученика: /find Али" },
         { command: "assign", description: "Назначить учителя ученику" },
         { command: "newteacher", description: "Создать учителя" },
+        { command: "newstudent", description: "Создать ученика" },
         { command: "students", description: "Последние ученики" },
         { command: "teachers", description: "Учителя" },
         { command: "site", description: "Ссылки на сайт" },
