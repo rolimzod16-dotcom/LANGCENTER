@@ -37,16 +37,12 @@ export async function listTeachers(
   const orgId =
     organizationId === undefined ? await getAdminOrgId() : organizationId;
 
-  const selectFull =
-    "id, full_name, phone, email, teacher_code, status, created_at, organization_id, password_plain";
-  const selectNoOrg =
-    "id, full_name, phone, email, teacher_code, status, created_at, password_plain";
-  const selectMin =
-    "id, full_name, phone, email, teacher_code, status, created_at";
-
-  let query = supabase.from("teachers").select(selectFull).order("created_at", {
-    ascending: false,
-  });
+  let query = supabase
+    .from("teachers")
+    .select(
+      "id, full_name, phone, email, teacher_code, status, created_at, organization_id, password_plain",
+    )
+    .order("created_at", { ascending: false });
 
   if (orgId) {
     query = query.eq("organization_id", orgId);
@@ -56,17 +52,29 @@ export async function listTeachers(
 
   if (error) {
     const lower = error.message.toLowerCase();
-    if (lower.includes("password_plain") || lower.includes("organization_id")) {
+    if (lower.includes("password_plain")) {
       const fallback = await supabase
         .from("teachers")
-        .select(lower.includes("password_plain") ? selectMin : selectNoOrg)
+        .select(
+          "id, full_name, phone, email, teacher_code, status, created_at",
+        )
         .order("created_at", { ascending: false });
       if (fallback.error) throw new Error(fallback.error.message);
-      return (fallback.data ?? []) as TeacherRow[];
+      return (fallback.data ?? []) as unknown as TeacherRow[];
+    }
+    if (lower.includes("organization_id")) {
+      const fallback = await supabase
+        .from("teachers")
+        .select(
+          "id, full_name, phone, email, teacher_code, status, created_at, password_plain",
+        )
+        .order("created_at", { ascending: false });
+      if (fallback.error) throw new Error(fallback.error.message);
+      return (fallback.data ?? []) as unknown as TeacherRow[];
     }
     throw new Error(error.message);
   }
-  return (data ?? []) as TeacherRow[];
+  return (data ?? []) as unknown as TeacherRow[];
 }
 
 async function generateTeacherCode(
