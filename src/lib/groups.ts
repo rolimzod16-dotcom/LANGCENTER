@@ -1,7 +1,9 @@
 import { getAdminOrgId, orgInsertFields } from "@/lib/org";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
-export async function listGroupsForTeacher(teacherId: string) {
+export async function listGroupsForTeacher(
+  teacherId: string,
+): Promise<GroupRow[]> {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");
 
@@ -12,7 +14,7 @@ export async function listGroupsForTeacher(teacherId: string) {
     .order("name", { ascending: true });
 
   if (error) throw new Error(error.message);
-  return data ?? [];
+  return (data ?? []) as GroupRow[];
 }
 
 export async function listAllGroups(orgId?: string | null) {
@@ -119,7 +121,7 @@ export async function createGroupForTeacher(input: {
   }
 
   if (error) throw new Error(error.message);
-  return data!;
+  return data! as GroupRow;
 }
 
 export async function createShiftsForTeacher(
