@@ -25,6 +25,7 @@ export type TeacherRow = {
   status: string;
   created_at: string;
   organization_id?: string | null;
+  password_plain?: string | null;
 };
 
 export async function listTeachers(
@@ -36,12 +37,16 @@ export async function listTeachers(
   const orgId =
     organizationId === undefined ? await getAdminOrgId() : organizationId;
 
-  let query = supabase
-    .from("teachers")
-    .select(
-      "id, full_name, phone, email, teacher_code, status, created_at, organization_id",
-    )
-    .order("created_at", { ascending: false });
+  const selectFull =
+    "id, full_name, phone, email, teacher_code, status, created_at, organization_id, password_plain";
+  const selectNoOrg =
+    "id, full_name, phone, email, teacher_code, status, created_at, password_plain";
+  const selectMin =
+    "id, full_name, phone, email, teacher_code, status, created_at";
+
+  let query = supabase.from("teachers").select(selectFull).order("created_at", {
+    ascending: false,
+  });
 
   if (orgId) {
     query = query.eq("organization_id", orgId);
@@ -50,10 +55,11 @@ export async function listTeachers(
   const { data, error } = await query;
 
   if (error) {
-    if (error.message.toLowerCase().includes("organization_id")) {
+    const lower = error.message.toLowerCase();
+    if (lower.includes("password_plain") || lower.includes("organization_id")) {
       const fallback = await supabase
         .from("teachers")
-        .select("id, full_name, phone, email, teacher_code, status, created_at")
+        .select(lower.includes("password_plain") ? selectMin : selectNoOrg)
         .order("created_at", { ascending: false });
       if (fallback.error) throw new Error(fallback.error.message);
       return (fallback.data ?? []) as TeacherRow[];
@@ -108,6 +114,7 @@ export async function createTeacher(input: {
     email: input.email?.trim() || null,
     teacher_code: teacherCode,
     password_hash: passwordHash,
+    password_plain: plainPassword,
     status: "active",
     ...orgFields,
   };
@@ -122,8 +129,14 @@ export async function createTeacher(input: {
     .single();
 
   if (error) {
-    if (error.message.toLowerCase().includes("organization_id")) {
+    const lower = error.message.toLowerCase();
+    if (lower.includes("password_plain")) {
+      delete insertPayload.password_plain;
+    }
+    if (lower.includes("organization_id")) {
       delete insertPayload.organization_id;
+    }
+    if (lower.includes("password_plain") || lower.includes("organization_id")) {
       const retry = await supabase
         .from("teachers")
         .insert(insertPayload)
@@ -226,12 +239,28 @@ export async function resetTeacherPassword(teacherId: string) {
   const plainPassword = generatePassword();
   const passwordHash = bcrypt.hashSync(plainPassword, 10);
 
-  const { data, error } = await supabase
+  const payload: Record<string, string> = {
+    password_hash: passwordHash,
+    password_plain: plainPassword,
+  };
+
+  let { data, error } = await supabase
     .from("teachers")
-    .update({ password_hash: passwordHash })
+    .update(payload)
     .eq("id", teacherId)
     .select("teacher_code, full_name")
     .single();
+
+  if (error?.message.toLowerCase().includes("password_plain")) {
+    const retry = await supabase
+      .from("teachers")
+      .update({ password_hash: passwordHash })
+      .eq("id", teacherId)
+      .select("teacher_code, full_name")
+      .single();
+    data = retry.data;
+    error = retry.error;
+  }
 
   if (error) throw new Error(error.message);
   return { ...data, plain_password: plainPassword };

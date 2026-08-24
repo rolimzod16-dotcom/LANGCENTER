@@ -145,11 +145,13 @@ async function listTeachersText() {
   const teachers = await listActiveTeachers();
   if (!teachers.length) return "Учителей нет.";
   return teachers
-    .map(
-      (t, i) =>
-        `${i + 1}. <b>${escapeHtml(t.full_name || "—")}</b> · <code>${escapeHtml(t.teacher_code || "")}</code>`,
-    )
-    .join("\n");
+    .map((t, i) => {
+      const pass = t.password_plain
+        ? ` · 🔐 <code>${escapeHtml(t.password_plain)}</code>`
+        : "";
+      return `${i + 1}. <b>${escapeHtml(t.full_name || "—")}</b>\n   🔑 <code>${escapeHtml(t.teacher_code || "")}</code>${pass}`;
+    })
+    .join("\n\n");
 }
 
 async function sendPendingList(token: string, chatId: number) {
@@ -863,7 +865,8 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
           : `⚠️ Привяжите: <code>/auth ПАРОЛЬ_АДМИНА</code>`,
         ``,
         `📝 Заявки → Принять / Отклонить`,
-        `➕ Ученик / ➕ Учитель — создать в боте`,
+        `➕ Ученик / ➕ Учитель — создать в боте (логин и пароль сразу в чат)`,
+        `👥 Ученики / 👨‍🏫 Учителя — списки с логином и паролем`,
         `📅 У учителя несколько смен: ученика можно посадить на 1 или на 5–6`,
         `👨‍🏫 После принятия → «Назначить учителя»`,
         `🔍 Быстрый поиск ученика → назначить учителя`,

@@ -11,6 +11,7 @@ type Teacher = {
   full_name: string;
   teacher_code: string;
   phone: string | null;
+  password_plain?: string | null;
 };
 
 export default function AdminTeachersPage() {
@@ -107,6 +108,13 @@ export default function AdminTeachersPage() {
         code: data.credentials.teacher_code,
         password: data.credentials.plain_password,
       });
+      setTeachers((prev) =>
+        prev.map((t) =>
+          t.id === id
+            ? { ...t, password_plain: data.credentials.plain_password }
+            : t,
+        ),
+      );
     } catch (err) {
       alert(err instanceof Error ? err.message : "Ошибка");
     } finally {
@@ -269,7 +277,8 @@ export default function AdminTeachersPage() {
           Список ({teachers.length})
         </h2>
         <p className="mb-4 text-sm text-slate-500">
-          Код виден всегда. Пароль зашифрован — только сброс.
+          Логин и пароль видны только админу. После «Новый пароль» старый
+          перестаёт работать.
         </p>
         <ul className="space-y-2">
           {teachers.map((t) => (
@@ -277,6 +286,7 @@ export default function AdminTeachersPage() {
               key={t.id}
               name={t.full_name}
               code={t.teacher_code}
+              password={t.password_plain}
               subtitle={t.phone || undefined}
               onResetPassword={() => handleResetPassword(t.id)}
               resetting={resettingId === t.id}

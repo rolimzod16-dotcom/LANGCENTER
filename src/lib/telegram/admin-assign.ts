@@ -16,6 +16,8 @@ export type TeacherHit = {
   id: string;
   full_name: string | null;
   teacher_code: string;
+  password_plain?: string | null;
+  phone?: string | null;
 };
 
 /** Быстрый поиск: имя, логин, телефон (ilike). */
@@ -62,17 +64,38 @@ export async function listActiveTeachers(): Promise<TeacherHit[]> {
 
   const { data, error } = await supabase
     .from("teachers")
-    .select("id, full_name, teacher_code, status")
+    .select("id, full_name, teacher_code, status, password_plain, phone")
     .order("full_name", { ascending: true })
     .limit(30);
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (error.message.toLowerCase().includes("password_plain")) {
+      const retry = await supabase
+        .from("teachers")
+        .select("id, full_name, teacher_code, status, phone")
+        .order("full_name", { ascending: true })
+        .limit(30);
+      if (retry.error) throw new Error(retry.error.message);
+      return (retry.data ?? [])
+        .filter((t) => !t.status || t.status === "active")
+        .map((t) => ({
+          id: t.id,
+          full_name: t.full_name,
+          teacher_code: t.teacher_code,
+          phone: t.phone,
+          password_plain: null,
+        }));
+    }
+    throw new Error(error.message);
+  }
   return (data ?? [])
     .filter((t) => !t.status || t.status === "active")
     .map((t) => ({
       id: t.id,
       full_name: t.full_name,
       teacher_code: t.teacher_code,
+      password_plain: (t as { password_plain?: string | null }).password_plain ?? null,
+      phone: t.phone,
     }));
 }
 
