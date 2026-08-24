@@ -71,6 +71,9 @@ export default function AdminTeachersPage() {
           last_name,
           phone: phone || undefined,
           group_name: groupName.trim() || undefined,
+          lesson_times: groupName.trim()
+            ? groupName.split(/[,;\n]+/).map((s) => s.trim())
+            : undefined,
         }),
       });
       const data = await res.json();
@@ -159,16 +162,16 @@ export default function AdminTeachersPage() {
             />
           </div>
           <div>
-            <label className="lc-label">Смены</label>
+            <label className="lc-label">Часы уроков</label>
             <input
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
               className="lc-input"
-              placeholder="Утро 09:00, Вечер 18:30, Сб 11:00"
+              placeholder="09:00, 14:00, 18:30"
             />
             <p className="mt-1 text-xs text-slate-500">
-              Через запятую. У одного учителя может быть 1 смена или 5–6.
-              Потом можно добавить ещё.
+              Во сколько ведёт. Через запятую — каждая цифра это отдельная смена.
+              Потом можно добавить ещё часы.
             </p>
           </div>
           {error && <p className="lc-alert lc-alert-error">{error}</p>}
@@ -196,7 +199,7 @@ export default function AdminTeachersPage() {
                   credentials: "include",
                   body: JSON.stringify({
                     teacher_id: extraGroupTeacher,
-                    names: extraGroupName.split(/[,;\n]+/).map((s) => s.trim()),
+                    times: extraGroupName.split(/[,;\n]+/).map((s) => s.trim()),
                   }),
                 });
                 const data = await res.json();
@@ -207,8 +210,8 @@ export default function AdminTeachersPage() {
                   .filter(Boolean);
                 alert(
                   created.length
-                    ? `Смены: ${created.join(", ")}`
-                    : "Смена создана",
+                    ? `Часы: ${created.join(", ")}`
+                    : "Слот создан",
                 );
               } catch (err) {
                 setError(err instanceof Error ? err.message : "Ошибка");
@@ -218,10 +221,10 @@ export default function AdminTeachersPage() {
             }}
           >
             <h2 className="text-base font-bold text-slate-900">
-              Добавить смены учителю
+              Добавить часы учителю
             </h2>
             <p className="text-sm text-slate-500">
-              Ученика потом можно посадить на одну смену или сразу на несколько.
+              Новые слоты по времени. Ученика потом сажают на один час или на несколько.
             </p>
             <div>
               <label className="lc-label">Учитель *</label>
@@ -240,16 +243,16 @@ export default function AdminTeachersPage() {
               </select>
             </div>
             <div>
-              <label className="lc-label">Названия смен *</label>
+              <label className="lc-label">Часы *</label>
               <input
                 value={extraGroupName}
                 onChange={(e) => setExtraGroupName(e.target.value)}
                 required
                 className="lc-input"
-                placeholder="Вечер 18:30, Сб 11:00"
+                placeholder="16:00, 19:00"
               />
               <p className="mt-1 text-xs text-slate-500">
-                Можно несколько через запятую.
+                Формат 09:00 — можно несколько через запятую.
               </p>
             </div>
             <button
@@ -257,7 +260,7 @@ export default function AdminTeachersPage() {
               disabled={extraLoading}
               className="lc-btn lc-btn-ghost px-5 py-2.5 disabled:opacity-50"
             >
-              {extraLoading ? "Создание…" : "Добавить смены"}
+              {extraLoading ? "Создание…" : "Добавить часы"}
             </button>
           </form>
         )}

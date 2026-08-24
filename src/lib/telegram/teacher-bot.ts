@@ -107,9 +107,15 @@ async function showStudents(token: string, chatId: number, teacherId: string) {
     await sendMessage(
       token,
       chatId,
-      `${mark} <b>${escapeHtml(s.full_name || "—")}</b>\n<code>${escapeHtml(s.student_code)}</code>${
-        s.group_name ? `\n📅 ${escapeHtml(s.group_name)}` : ""
-      }`,
+      [
+        `${mark} <b>${escapeHtml(s.full_name || "—")}</b>`,
+        `<code>${escapeHtml(s.student_code)}</code>`,
+        s.group_name ? `🕐 ${escapeHtml(s.group_name)}` : "",
+        `📞 ${escapeHtml(s.phone || "нет номера")}`,
+        `💬 ${s.telegram_username ? `@${escapeHtml(String(s.telegram_username).replace(/^@/, ""))}` : "Telegram не привязан"}`,
+      ]
+        .filter(Boolean)
+        .join("\n"),
       {
         reply_markup: inlineKeyboard([
           [
@@ -460,7 +466,13 @@ export async function handleTeacherBotUpdate(update: TgUpdate): Promise<void> {
 
   const login = parseLogin(text);
   if (login) {
-    const res = await linkTeacherTelegram(login.code, login.password, chatId);
+    const username = msg.from?.username;
+    const res = await linkTeacherTelegram(
+      login.code,
+      login.password,
+      chatId,
+      username,
+    );
     if (!res.ok) {
       await sendMessage(token, chatId, `❌ ${res.error}`);
       return;

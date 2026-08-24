@@ -26,6 +26,9 @@ export async function POST(request: NextRequest) {
     const groupNames = Array.isArray(body.group_names)
       ? body.group_names.map((n: unknown) => String(n))
       : undefined;
+    const lessonTimes = Array.isArray(body.lesson_times)
+      ? body.lesson_times.map((n: unknown) => String(n))
+      : undefined;
 
     const teacher = await createTeacher({
       first_name: firstName,
@@ -34,6 +37,7 @@ export async function POST(request: NextRequest) {
       phone: body.phone ? String(body.phone) : undefined,
       group_name: body.group_name ? String(body.group_name) : undefined,
       group_names: groupNames,
+      lesson_times: lessonTimes,
     });
 
     return NextResponse.json({ teacher }, { status: 201 });

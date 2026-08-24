@@ -4,11 +4,13 @@ import { getStudentAttendance } from "@/lib/attendance";
 import { getStudentGrades } from "@/lib/grades";
 import { getStudentTeachers } from "@/lib/groups";
 import { getStudentPaymentStatus } from "@/lib/payments";
+import { normalizeTelegramUsername } from "@/lib/contacts";
 
 export async function linkStudentTelegram(
   login: string,
   password: string,
   chatId: number,
+  username?: string | null,
 ): Promise<
   | { ok: true; student_code: string; full_name: string }
   | { ok: false; error: string }
@@ -24,9 +26,13 @@ export async function linkStudentTelegram(
   }
 
   // best-effort save chat id
+  const payload: Record<string, unknown> = { telegram_chat_id: chatId };
+  const uname = normalizeTelegramUsername(username);
+  if (uname) payload.telegram_username = uname;
+
   const { error } = await supabase
     .from("students")
-    .update({ telegram_chat_id: chatId })
+    .update(payload)
     .eq("id", student.id);
 
   if (error) {

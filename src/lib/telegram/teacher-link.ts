@@ -1,11 +1,13 @@
 import { loginTeacher } from "@/lib/teachers";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { getTeacherStudents } from "@/lib/groups";
+import { normalizeTelegramUsername } from "@/lib/contacts";
 
 export async function linkTeacherTelegram(
   code: string,
   password: string,
   chatId: number,
+  username?: string | null,
 ): Promise<
   | { ok: true; teacher_code: string; full_name: string; id: string }
   | { ok: false; error: string }
@@ -18,9 +20,13 @@ export async function linkTeacherTelegram(
   const supabase = getSupabaseServerClient();
   if (!supabase) return { ok: false, error: "БД не настроена" };
 
+  const payload: Record<string, unknown> = { telegram_chat_id: chatId };
+  const uname = normalizeTelegramUsername(username);
+  if (uname) payload.telegram_username = uname;
+
   const { error } = await supabase
     .from("teachers")
-    .update({ telegram_chat_id: chatId })
+    .update(payload)
     .eq("id", teacher.id);
 
   if (error && !error.message.toLowerCase().includes("telegram_chat_id")) {
@@ -62,6 +68,7 @@ export async function listTeacherStudents(teacherId: string) {
     full_name: s.full_name,
     student_code: s.student_code,
     phone: s.phone,
+    telegram_username: s.telegram_username,
     status: "active" as string | null,
     group_name: s.group_name,
   }));

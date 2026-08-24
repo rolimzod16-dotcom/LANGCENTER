@@ -34,7 +34,11 @@ import {
 } from "@/lib/telegram/admin-assign";
 import {
   createGroupForTeacher,
+  formatShiftLabel,
   listGroupsForTeacher,
+  nextShiftNumber,
+  numberedShiftName,
+  parseLessonTimes,
 } from "@/lib/groups";
 import {
   clearTgSession,
@@ -237,7 +241,7 @@ async function promptAssignShifts(
   if (!groups.length) {
     const created = await createGroupForTeacher({
       teacher_id: teacherId,
-      name: "Основная смена",
+      name: numberedShiftName(1),
     });
     groups = [created];
   }
@@ -261,7 +265,7 @@ async function promptAssignShifts(
         `✅ Закреплён`,
         `👤 ${escapeHtml(student?.full_name || "—")}`,
         `👨‍🏫 ${escapeHtml(teacher?.full_name || "—")}`,
-        `📅 ${escapeHtml(groups[0]!.name)}`,
+        `🕐 ${escapeHtml(formatShiftLabel(groups[0]!))}`,
         ``,
         `Если нужны ещё смены — «➕ Новая смена».`,
       ].join("\n"),
@@ -274,9 +278,9 @@ async function promptAssignShifts(
     token,
     chatId,
     [
-      `📅 <b>Смены учителя</b> ${escapeHtml(teacher?.full_name || "")}`,
+      `🕐 <b>Часы</b> ${escapeHtml(teacher?.full_name || "")}`,
       ``,
-      `Отметьте одну или несколько. Ученик может ходить на 1 смену или на 5–6.`,
+      `Отметьте один час или несколько. Ученик может ходить на 1 слот или на 5–6.`,
     ].join("\n"),
     { reply_markup: shiftPickKeyboard(groups) },
   );
@@ -403,7 +407,7 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
       await sendMessage(
         token,
         chatId,
-        "➕ Название новой смены?\nПример: <code>Вечер 18:30</code> или <code>Сб 11:00</code>\nОтмена: /cancel",
+        "➕ Во сколько новый урок?\nПример: <code>18:30</code>\nОтмена: /cancel",
       );
       return;
     }
@@ -462,7 +466,7 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
       await sendMessage(
         token,
         chatId,
-        `📅 Смена <b>${escapeHtml(picked?.name || "")}</b> закреплена.\nМожно отметить ещё или «Готово».`,
+        `📅 Слот <b>${escapeHtml(picked ? formatShiftLabel(picked) : "")}</b> закреплён.\nМожно отметить ещё или «Готово».`,
         { reply_markup: shiftPickKeyboard(groups) },
       );
       return;
@@ -642,19 +646,22 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
       const teacherId = String(session.data.teacher_id || "");
       const name = text.trim();
       if (!studentId || !teacherId || name.length < 1) {
-        await sendMessage(token, chatId, "Введите название смены.");
+        await sendMessage(token, chatId, "Введите время, например <code>18:30</code>.");
         return;
       }
       try {
+        const times = parseLessonTimes(name);
+        const existing = await listGroupsForTeacher(teacherId);
         const group = await createGroupForTeacher({
           teacher_id: teacherId,
-          name,
+          name: numberedShiftName(nextShiftNumber(existing)),
+          lesson_time: times[0] || null,
         });
         await assignTeacherToStudent(studentId, teacherId, group.id);
         await sendMessage(
           token,
           chatId,
-          `📅 Смена <b>${escapeHtml(group.name)}</b> создана и ученик на неё посажен.`,
+          `📅 Слот <b>${escapeHtml(times[0] || group.name)}</b> создан, ученик посажен.`,
         );
         await promptAssignShifts(token, chatId, studentId, teacherId);
       } catch (e) {
@@ -683,12 +690,12 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
         token,
         chatId,
         [
-          "📅 <b>Смены учителя</b>",
+          "🕐 <b>Часы уроков</b>",
           "",
-          "Через запятую, например:",
-          "<code>Утро 09:00, Вечер 18:30, Сб 11:00</code>",
+          "Во сколько ведёт? Через запятую:",
+          "<code>09:00, 14:00, 18:30</code>",
           "",
-          "Или «-» — одна основная смена.",
+          "Или «-» — одна смена без времени.",
         ].join("\n"),
       );
       return;
@@ -705,7 +712,7 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
       const full = String(session.data.full_name || "").trim();
       const { last_name, first_name } = splitPersonName(full);
       const phone = String(session.data.phone || "").trim() || undefined;
-      const shifts = text === "-" ? "Основная смена" : text.trim();
+      const shifts = text === "-" ? numberedShiftName(1) : text.trim();
       try {
         const teacher = await createTeacher({
           first_name: first_name || "Новый",
@@ -734,8 +741,14 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
             `👤 ${escapeHtml(teacher.full_name)}`,
             `🔑 <code>${escapeHtml(teacher.teacher_code)}</code>`,
             `🔐 <code>${escapeHtml(teacher.plain_password)}</code>`,
-            `📅 Смены: ${escapeHtml(
-              (teacher.shifts ?? []).map((s) => s.name).join(", ") || "Основная смена",
+            `🕐 Часы: ${escapeHtml(
+              (teacher.shifts ?? [])
+                .map((s) =>
+                  s.lesson_time
+                    ? String(s.lesson_time).slice(0, 5)
+                    : s.name,
+                )
+                .join(", ") || numberedShiftName(1),
             )}`,
             ``,
             `Передайте код и пароль учителю.`,

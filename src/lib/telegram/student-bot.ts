@@ -294,7 +294,12 @@ async function finishTrial(
   }
 }
 
-async function handleRegState(token: string, chatId: number, text: string) {
+async function handleRegState(
+  token: string,
+  chatId: number,
+  text: string,
+  username?: string,
+) {
   const session = await getTgSession(chatId, "student");
   const state = session.state;
   const data = session.data;
@@ -380,10 +385,9 @@ async function handleRegState(token: string, chatId: number, text: string) {
 
       const supabase = getSupabaseServerClient();
       if (supabase) {
-        await supabase
-          .from("students")
-          .update({ telegram_chat_id: chatId })
-          .eq("id", student.id);
+        const payload: Record<string, unknown> = { telegram_chat_id: chatId };
+        if (username) payload.telegram_username = username.replace(/^@/, "");
+        await supabase.from("students").update(payload).eq("id", student.id);
       }
 
       await clearTgSession(chatId, "student");
@@ -513,7 +517,7 @@ export async function handleStudentBotUpdate(update: TgUpdate): Promise<void> {
     return;
   }
   if (session.state.startsWith("reg_")) {
-    await handleRegState(token, chatId, text);
+    await handleRegState(token, chatId, text, username);
     return;
   }
 
@@ -555,6 +559,7 @@ export async function handleStudentBotUpdate(update: TgUpdate): Promise<void> {
       loginCmd.login,
       loginCmd.password,
       chatId,
+      username,
     );
     if (!res.ok) {
       await sendMessage(token, chatId, `❌ ${res.error}`);
@@ -671,15 +676,43 @@ export async function handleStudentBotUpdate(update: TgUpdate): Promise<void> {
     }
 
     if (text.includes("Учител") || text === "/teachers") {
-      const teachers = summary.teachers as Array<{ full_name?: string }>;
+      const teachers = summary.teachers as Array<{
+        teacher_name?: string;
+        group_name?: string;
+        teacher_phone?: string | null;
+        telegram_username?: string | null;
+      }>;
       if (!teachers?.length) {
         await sendMessage(token, chatId, "Учитель ещё не назначен.");
         return;
       }
-      const body = teachers
-        .map((t, i) => `${i + 1}. <b>${escapeHtml(t.full_name || "—")}</b>`)
-        .join("\n");
-      await sendMessage(token, chatId, `<b>Ваши учителя</b>\n\n${body}`);
+      const seen = new Set<string>();
+      const lines: string[] = [];
+      for (const t of teachers) {
+        const key = `${t.teacher_name}|${t.teacher_phone}|${t.telegram_username}`;
+        const hours = teachers
+          .filter((x) => x.teacher_name === t.teacher_name)
+          .map((x) => x.group_name)
+          .filter(Boolean);
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const tg = t.telegram_username
+          ? `@${String(t.telegram_username).replace(/^@/, "")}`
+          : "Telegram не привязан";
+        lines.push(
+          [
+            `<b>${escapeHtml(t.teacher_name || "—")}</b>`,
+            `🕐 ${escapeHtml(hours.join(", ") || "—")}`,
+            `📞 ${escapeHtml(t.teacher_phone || "нет номера")}`,
+            `💬 ${escapeHtml(tg)}`,
+          ].join("\n"),
+        );
+      }
+      await sendMessage(
+        token,
+        chatId,
+        `<b>Ваши учителя</b>\n\n${lines.join("\n\n")}`,
+      );
       return;
     }
   }

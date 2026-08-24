@@ -1,6 +1,12 @@
 import bcrypt from "bcryptjs";
 import { customAlphabet } from "nanoid";
-import { createShiftsForTeacher, parseShiftNames } from "@/lib/groups";
+import {
+  createShiftsForTeacher,
+  createShiftsFromTimes,
+  numberedShiftName,
+  parseLessonTimes,
+  parseShiftNames,
+} from "@/lib/groups";
 import { getAdminOrgId, orgInsertFields } from "@/lib/org";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -80,6 +86,7 @@ export async function createTeacher(input: {
   phone?: string;
   group_name?: string;
   group_names?: string[];
+  lesson_times?: string[];
   organization_id?: string | null;
 }) {
   const supabase = getSupabaseServerClient();
@@ -133,20 +140,30 @@ export async function createTeacher(input: {
 
   if (!teacher) throw new Error("Не удалось создать учителя");
 
+  const times = [
+    ...(input.lesson_times ?? []),
+    ...parseLessonTimes(input.group_name),
+  ];
   const shiftNames = [
     ...(input.group_names ?? []),
     ...parseShiftNames(input.group_name),
-  ];
-  const shifts = await createShiftsForTeacher(
-    teacher.id,
-    shiftNames.length ? shiftNames : ["Основная смена"],
-    orgId,
-  );
+  ].filter((n) => !parseLessonTimes(n).length);
+  const shifts = times.length
+    ? await createShiftsFromTimes(teacher.id, times, orgId)
+    : await createShiftsForTeacher(
+        teacher.id,
+        shiftNames.length ? shiftNames : [numberedShiftName(1)],
+        orgId,
+      );
 
   return {
     ...teacher,
     plain_password: plainPassword,
-    shifts: shifts.map((s) => ({ id: s.id, name: s.name })),
+    shifts: shifts.map((s) => ({
+      id: s.id,
+      name: s.name,
+      lesson_time: s.lesson_time ?? null,
+    })),
   };
 }
 

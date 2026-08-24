@@ -1,5 +1,5 @@
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { assignStudentToTeacher } from "@/lib/groups";
+import { assignStudentToTeacher, formatShiftLabel } from "@/lib/groups";
 import { escapeHtml, inlineKeyboard } from "@/lib/telegram/api";
 
 export type ShiftHit = { id: string; name: string };
@@ -155,10 +155,12 @@ export function studentResultKeyboard(studentId: string) {
   ]);
 }
 
-export function shiftPickKeyboard(groups: ShiftHit[]) {
+export function shiftPickKeyboard(
+  groups: Array<ShiftHit & { lesson_time?: string | null }>,
+) {
   const rows = groups.map((g) => [
     {
-      text: `📅 ${g.name}`.slice(0, 60),
+      text: `📅 ${formatShiftLabel(g)}`.slice(0, 60),
       callback_data: `asg:g:${g.id}`,
     },
   ]);

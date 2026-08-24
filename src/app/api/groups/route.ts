@@ -29,10 +29,14 @@ export async function POST(request: NextRequest) {
       ? body.names.map((n: unknown) => String(n))
       : body.name
         ? [String(body.name)]
-        : [];
+        : Array.isArray(body.times)
+          ? body.times.map((n: unknown) => String(n))
+          : body.times
+            ? [String(body.times)]
+            : [];
     if (!teacherId || !names.length) {
       return NextResponse.json(
-        { error: "teacher_id и name/names обязательны" },
+        { error: "Укажите часы уроков, например 09:00, 18:30" },
         { status: 400 },
       );
     }

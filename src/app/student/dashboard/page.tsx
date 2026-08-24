@@ -45,7 +45,12 @@ export default function StudentDashboardPage() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<{
     student: { full_name: string; student_code: string };
-    teachers: { teacher_name: string; group_name: string }[];
+    teachers: {
+      teacher_name: string;
+      group_name: string;
+      teacher_phone?: string | null;
+      telegram_username?: string | null;
+    }[];
     grades: {
       title: string;
       score: number;
@@ -161,8 +166,30 @@ export default function StudentDashboardPage() {
                   <li key={`${t.teacher_name}-${t.group_name}-${i}`} className="lc-card p-4">
                     <p className="font-bold text-slate-900">{t.teacher_name}</p>
                     <p className="text-sm text-slate-500">
-                      Смена: {t.group_name}
+                      Во сколько: {t.group_name}
                     </p>
+                    {t.teacher_phone ? (
+                      <a
+                        href={`tel:${t.teacher_phone.replace(/[^\d+]/g, "")}`}
+                        className="mt-2 block text-sm font-medium text-emerald-700"
+                      >
+                        📞 {t.teacher_phone}
+                      </a>
+                    ) : (
+                      <p className="mt-2 text-sm text-slate-400">Номера нет</p>
+                    )}
+                    {t.telegram_username ? (
+                      <a
+                        href={`https://t.me/${t.telegram_username.replace(/^@/, "")}`}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-1 block text-sm font-medium text-sky-700"
+                      >
+                        💬 @{t.telegram_username.replace(/^@/, "")}
+                      </a>
+                    ) : (
+                      <p className="text-sm text-slate-400">Telegram не привязан</p>
+                    )}
                   </li>
                 ))}
               </ul>

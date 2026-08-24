@@ -80,7 +80,9 @@ export default function AdminStudentsPage() {
 
   const [teacherId, setTeacherId] = useState("");
   const [groupIds, setGroupIds] = useState<string[]>([]);
-  const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
+  const [groups, setGroups] = useState<
+    { id: string; name: string; lesson_time?: string | null }[]
+  >([]);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [monthlyFee, setMonthlyFee] = useState("500000");
@@ -200,7 +202,11 @@ export default function AdminStudentsPage() {
     })
       .then((r) => r.json())
       .then((data) => {
-        const list = (data.groups ?? []) as { id: string; name: string }[];
+        const list = (data.groups ?? []) as {
+          id: string;
+          name: string;
+          lesson_time?: string | null;
+        }[];
         setGroups(list);
         setGroupIds(list.length === 1 && list[0] ? [list[0].id] : []);
       })
@@ -357,8 +363,8 @@ export default function AdminStudentsPage() {
       title="Ученики"
       description={
         <>
-          Шаг 2: учитель уже есть — добавляйте учеников и сажайте на смены.
-          Один ученик может ходить на 1 смену или на 5–6. Код и пароль — для{" "}
+          Шаг 2: учитель уже есть — добавляйте учеников и сажайте на часы.
+          Один ученик может ходить в 1 слот или в 5–6. Код и пароль — для{" "}
           <Link href="/student/login" className="font-medium text-emerald-600 underline">
             кабинета ученика
           </Link>
@@ -414,7 +420,7 @@ export default function AdminStudentsPage() {
           </div>
           {teacherId && groups.length > 0 && (
             <div>
-              <label className="lc-label">Смены ученика</label>
+              <label className="lc-label">Часы ученика</label>
               <div className="flex flex-wrap gap-2">
                 {groups.map((g) => {
                   const on = groupIds.includes(g.id);
@@ -439,7 +445,9 @@ export default function AdminStudentsPage() {
                           )
                         }
                       />
-                      {g.name}
+                      {g.lesson_time
+                        ? `${String(g.lesson_time).slice(0, 5)} · ${g.name}`
+                        : g.name}
                     </label>
                   );
                 })}

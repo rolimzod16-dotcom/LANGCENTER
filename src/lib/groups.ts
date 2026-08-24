@@ -7,11 +7,22 @@ export async function listGroupsForTeacher(
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("groups")
-    .select("id, name, level, teacher_id, created_at")
+    .select("id, name, level, teacher_id, created_at, lesson_time")
     .eq("teacher_id", teacherId)
-    .order("name", { ascending: true });
+    .order("lesson_time", { ascending: true, nullsFirst: false });
+
+  let { data, error } = await query;
+  if (error?.message.toLowerCase().includes("lesson_time")) {
+    const fallback = await supabase
+      .from("groups")
+      .select("id, name, level, teacher_id, created_at")
+      .eq("teacher_id", teacherId)
+      .order("name", { ascending: true });
+    data = fallback.data;
+    error = fallback.error;
+  }
 
   if (error) throw new Error(error.message);
   return (data ?? []) as GroupRow[];
@@ -53,9 +64,57 @@ export type GroupRow = {
   level: string | null;
   teacher_id: string | null;
   created_at?: string;
+  lesson_time?: string | null;
 };
 
-/** «Утро 09:00, Вечер 18:30» / с новой строки → список смен */
+export function formatLessonTime(value?: string | null): string {
+  if (!value) return "";
+  return String(value).slice(0, 5);
+}
+
+export function formatShiftLabel(g: {
+  name?: string | null;
+  lesson_time?: string | null;
+}): string {
+  const time = formatLessonTime(g.lesson_time);
+  const name = (g.name || "").trim();
+  if (time && name) return `${time} · ${name}`;
+  return time || name || "Смена";
+}
+
+export function numberedShiftName(n: number) {
+  return `Смена ${n}`;
+}
+
+export function nextShiftNumber(existing: { name?: string | null }[]): number {
+  let max = 0;
+  for (const g of existing) {
+    const m = String(g.name || "").match(/^смена\s+(\d+)$/i);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return Math.max(max, existing.length) + 1;
+}
+
+/** 9:00 / 18.30 / 18:00, 14:30 → ["09:00", "18:30", ...] */
+export function parseLessonTimes(raw?: string | null): string[] {
+  if (!raw) return [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const part of raw.split(/[,;\n]+/)) {
+    const m = part.trim().match(/^(\d{1,2})[:.](\d{2})$/);
+    if (!m) continue;
+    const h = Number(m[1]);
+    const min = Number(m[2]);
+    if (h > 23 || min > 59) continue;
+    const t = `${String(h).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+    if (seen.has(t)) continue;
+    seen.add(t);
+    out.push(t);
+  }
+  return out;
+}
+
+/** Список названий / с новой строки */
 export function parseShiftNames(raw?: string | null): string[] {
   if (!raw) return [];
   const trimmed = raw.trim();
@@ -73,10 +132,13 @@ export function parseShiftNames(raw?: string | null): string[] {
   return out;
 }
 
+const GROUP_SELECT = "id, name, level, teacher_id, created_at, lesson_time";
+
 export async function createGroupForTeacher(input: {
   teacher_id: string;
   name: string;
   level?: string;
+  lesson_time?: string | null;
   organization_id?: string | null;
 }) {
   const supabase = getSupabaseServerClient();
@@ -84,37 +146,70 @@ export async function createGroupForTeacher(input: {
 
   const name = input.name.trim();
   if (!name) throw new Error("Название смены обязательно");
+  const lessonTime = input.lesson_time
+    ? formatLessonTime(input.lesson_time) || null
+    : null;
+
+  if (lessonTime) {
+    const { data: byTime } = await supabase
+      .from("groups")
+      .select(GROUP_SELECT)
+      .eq("teacher_id", input.teacher_id)
+      .eq("lesson_time", lessonTime)
+      .maybeSingle();
+    if (byTime) return byTime as GroupRow;
+  }
 
   const { data: existing } = await supabase
     .from("groups")
-    .select("id, name, level, teacher_id, created_at")
+    .select(GROUP_SELECT)
     .eq("teacher_id", input.teacher_id)
     .ilike("name", name)
     .maybeSingle();
-  if (existing) return existing as GroupRow;
+  if (existing) {
+    if (lessonTime && !existing.lesson_time) {
+      await supabase
+        .from("groups")
+        .update({ lesson_time: lessonTime })
+        .eq("id", existing.id);
+      return { ...existing, lesson_time: lessonTime } as GroupRow;
+    }
+    return existing as GroupRow;
+  }
 
   const orgFields = await orgInsertFields(
     input.organization_id ?? (await getAdminOrgId()),
   );
 
-  const base = {
+  const base: Record<string, unknown> = {
     teacher_id: input.teacher_id,
     name,
     level: input.level?.trim() || null,
+    lesson_time: lessonTime,
   };
 
   let { data, error } = await supabase
     .from("groups")
     .insert({ ...base, ...orgFields })
-    .select("id, name, level, teacher_id, created_at")
+    .select(GROUP_SELECT)
     .single();
 
-  // organization_id column may not exist
+  if (error?.message.toLowerCase().includes("lesson_time")) {
+    delete base.lesson_time;
+    const retry = await supabase
+      .from("groups")
+      .insert({ ...base, ...orgFields })
+      .select("id, name, level, teacher_id, created_at")
+      .single();
+    data = retry.data as typeof data;
+    error = retry.error;
+  }
+
   if (error?.message.toLowerCase().includes("organization_id")) {
     const retry = await supabase
       .from("groups")
       .insert(base)
-      .select("id, name, level, teacher_id, created_at")
+      .select(GROUP_SELECT)
       .single();
     data = retry.data;
     error = retry.error;
@@ -124,13 +219,47 @@ export async function createGroupForTeacher(input: {
   return data! as GroupRow;
 }
 
+export async function createShiftsFromTimes(
+  teacherId: string,
+  times: string[],
+  organizationId?: string | null,
+) {
+  const existing = await listGroupsForTeacher(teacherId);
+  let next = nextShiftNumber(existing);
+  const created: GroupRow[] = [];
+  for (const raw of times) {
+    const time = formatLessonTime(raw);
+    if (!time) continue;
+    const already = existing.find((g) => formatLessonTime(g.lesson_time) === time);
+    if (already) {
+      created.push(already);
+      continue;
+    }
+    const row = await createGroupForTeacher({
+      teacher_id: teacherId,
+      name: numberedShiftName(next),
+      lesson_time: time,
+      organization_id: organizationId,
+    });
+    next += 1;
+    existing.push(row);
+    created.push(row);
+  }
+  return created;
+}
+
 export async function createShiftsForTeacher(
   teacherId: string,
   names: string[],
   organizationId?: string | null,
 ) {
-  const unique = parseShiftNames(names.join(", "));
-  const list = unique.length ? unique : ["Основная смена"];
+  const joined = names.join(", ");
+  const times = parseLessonTimes(joined);
+  if (times.length) {
+    return createShiftsFromTimes(teacherId, times, organizationId);
+  }
+  const unique = parseShiftNames(joined);
+  const list = unique.length ? unique : [numberedShiftName(1)];
   const created: GroupRow[] = [];
   for (const name of list) {
     created.push(
@@ -171,7 +300,7 @@ export async function assignStudentToTeacher(
   if (!available.length) {
     const created = await createGroupForTeacher({
       teacher_id: teacherId,
-      name: "Основная смена",
+      name: numberedShiftName(1),
     });
     available = [created];
   }
@@ -306,23 +435,47 @@ export async function getTeacherStudents(teacherId: string) {
 
   const { data: groups, error: gErr } = await supabase
     .from("groups")
-    .select("id, name")
+    .select("id, name, lesson_time")
     .eq("teacher_id", teacherId)
-    .order("name", { ascending: true });
+    .order("lesson_time", { ascending: true });
 
   if (gErr) throw new Error(gErr.message);
   if (!groups?.length) return [];
 
-  const groupById = new Map(groups.map((g) => [g.id, g.name]));
+  const groupById = new Map(
+    groups.map((g) => [g.id, formatShiftLabel(g)]),
+  );
   const groupIds = groups.map((g) => g.id);
 
   const { data, error } = await supabase
     .from("group_students")
-    .select("group_id, student_id, students(id, full_name, student_code, phone)")
+    .select(
+      "group_id, student_id, students(id, full_name, student_code, phone, telegram_username, telegram_chat_id)",
+    )
     .in("group_id", groupIds);
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    const retry = await supabase
+      .from("group_students")
+      .select("group_id, student_id, students(id, full_name, student_code, phone)")
+      .in("group_id", groupIds);
+    if (retry.error) throw new Error(error.message);
+    const mapped = (retry.data ?? []).map((row) => ({
+      ...row,
+      students: row.students
+        ? { ...(row.students as object), telegram_username: null }
+        : null,
+    }));
+    return mapTeacherStudents(mapped, groupById);
+  }
 
+  return mapTeacherStudents(data ?? [], groupById);
+}
+
+function mapTeacherStudents(
+  data: Array<{ group_id: string; students: unknown }>,
+  groupById: Map<string, string>,
+) {
   const byStudent = new Map<
     string,
     {
@@ -330,6 +483,7 @@ export async function getTeacherStudents(teacherId: string) {
       full_name: string;
       student_code: string;
       phone: string | null;
+      telegram_username: string | null;
       group_name: string;
       group_names: string[];
     }
@@ -341,6 +495,7 @@ export async function getTeacherStudents(teacherId: string) {
       full_name: string;
       student_code: string;
       phone: string | null;
+      telegram_username?: string | null;
     } | null;
     if (!s?.id) continue;
 
@@ -357,6 +512,7 @@ export async function getTeacherStudents(teacherId: string) {
         full_name: s.full_name,
         student_code: s.student_code,
         phone: s.phone,
+        telegram_username: s.telegram_username ?? null,
         group_name: gName,
         group_names: gName ? [gName] : [],
       });
@@ -374,23 +530,66 @@ export async function getStudentTeachers(studentId: string) {
 
   const { data, error } = await supabase
     .from("group_students")
-    .select("group_id, groups(id, name, teachers(id, full_name, teacher_code))")
+    .select(
+      "group_id, groups(id, name, lesson_time, teachers(id, full_name, teacher_code, phone, telegram_username))",
+    )
     .eq("student_id", studentId);
 
-  if (error) throw new Error(error.message);
+  if (error) {
+    if (error.message.toLowerCase().includes("lesson_time") || error.message.toLowerCase().includes("telegram_username")) {
+      const retry = await supabase
+        .from("group_students")
+        .select("group_id, groups(id, name, teachers(id, full_name, teacher_code, phone))")
+        .eq("student_id", studentId);
+      if (retry.error) throw new Error(retry.error.message);
+      return (retry.data ?? []).map((row) => {
+        const g = row.groups as unknown as {
+          id: string;
+          name: string;
+          teachers: {
+            id: string;
+            full_name: string;
+            teacher_code: string;
+            phone?: string | null;
+          };
+        };
+        return {
+          group_id: g.id,
+          group_name: g.name,
+          lesson_time: null as string | null,
+          teacher_id: g.teachers.id,
+          teacher_name: g.teachers.full_name,
+          teacher_code: g.teachers.teacher_code,
+          teacher_phone: g.teachers.phone ?? null,
+          telegram_username: null as string | null,
+        };
+      });
+    }
+    throw new Error(error.message);
+  }
 
   return (data ?? []).map((row) => {
     const g = row.groups as unknown as {
       id: string;
       name: string;
-      teachers: { id: string; full_name: string; teacher_code: string };
+      lesson_time?: string | null;
+      teachers: {
+        id: string;
+        full_name: string;
+        teacher_code: string;
+        phone?: string | null;
+        telegram_username?: string | null;
+      };
     };
     return {
       group_id: g.id,
-      group_name: g.name,
+      group_name: formatShiftLabel({ name: g.name, lesson_time: g.lesson_time }),
+      lesson_time: g.lesson_time ?? null,
       teacher_id: g.teachers.id,
       teacher_name: g.teachers.full_name,
       teacher_code: g.teachers.teacher_code,
+      teacher_phone: g.teachers.phone ?? null,
+      telegram_username: g.teachers.telegram_username ?? null,
     };
   });
 }

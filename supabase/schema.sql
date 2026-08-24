@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS students (
   payment_due_day INTEGER DEFAULT 10,
   notes TEXT,
   telegram_chat_id BIGINT,
+  telegram_username TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -50,6 +51,7 @@ CREATE TABLE IF NOT EXISTS teachers (
   password_plain TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   telegram_chat_id BIGINT,
+  telegram_username TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
@@ -59,6 +61,7 @@ CREATE TABLE IF NOT EXISTS groups (
   teacher_id UUID REFERENCES teachers(id) ON DELETE SET NULL,
   name TEXT NOT NULL,
   level TEXT,
+  lesson_time TIME,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

@@ -10,6 +10,8 @@ type Student = {
   student_code: string;
   group_name?: string;
   group_names?: string[];
+  phone?: string | null;
+  telegram_username?: string | null;
 };
 
 type AttendanceStatus = "present" | "absent" | "late";
@@ -231,7 +233,7 @@ export default function TeacherDashboardPage() {
                     : "border-slate-200 bg-white text-slate-600"
                 }`}
               >
-                Все смены
+                Все часы
               </button>
               {shiftNames.map((name) => (
                 <button
@@ -282,9 +284,31 @@ export default function TeacherDashboardPage() {
                         </p>
                         {s.group_name ? (
                           <p className="mt-1 text-xs text-slate-500">
-                            Смены: {s.group_name}
+                            Во сколько: {s.group_name}
                           </p>
                         ) : null}
+                        {s.phone ? (
+                          <a
+                            href={`tel:${s.phone.replace(/[^\d+]/g, "")}`}
+                            className="mt-1 block text-sm font-medium text-emerald-700"
+                          >
+                            📞 {s.phone}
+                          </a>
+                        ) : (
+                          <p className="mt-1 text-xs text-slate-400">Номера нет</p>
+                        )}
+                        {s.telegram_username ? (
+                          <a
+                            href={`https://t.me/${s.telegram_username.replace(/^@/, "")}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block text-sm font-medium text-sky-700"
+                          >
+                            💬 @{s.telegram_username.replace(/^@/, "")}
+                          </a>
+                        ) : (
+                          <p className="text-xs text-slate-400">Telegram не привязан</p>
+                        )}
                       </div>
                       {todayStatus && (
                         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
