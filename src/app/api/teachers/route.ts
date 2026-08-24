@@ -23,12 +23,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const groupNames = Array.isArray(body.group_names)
+      ? body.group_names.map((n: unknown) => String(n))
+      : undefined;
+
     const teacher = await createTeacher({
       first_name: firstName,
       last_name: lastName,
       email: body.email ? String(body.email) : undefined,
       phone: body.phone ? String(body.phone) : undefined,
       group_name: body.group_name ? String(body.group_name) : undefined,
+      group_names: groupNames,
     });
 
     return NextResponse.json({ teacher }, { status: 201 });

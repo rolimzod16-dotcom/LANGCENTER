@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
-  createGroupForTeacher,
+  createShiftsForTeacher,
   listAllGroups,
   listGroupsForTeacher,
 } from "@/lib/groups";
@@ -25,22 +25,23 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const teacherId = String(body.teacher_id ?? "").trim();
-    const name = String(body.name ?? "").trim();
-    if (!teacherId || !name) {
+    const names = Array.isArray(body.names)
+      ? body.names.map((n: unknown) => String(n))
+      : body.name
+        ? [String(body.name)]
+        : [];
+    if (!teacherId || !names.length) {
       return NextResponse.json(
-        { error: "teacher_id и name обязательны" },
+        { error: "teacher_id и name/names обязательны" },
         { status: 400 },
       );
     }
 
-    const group = await createGroupForTeacher({
-      teacher_id: teacherId,
-      name,
-      level: body.level ? String(body.level) : undefined,
-      organization_id: await getAdminOrgId(),
-    });
+    const orgId = await getAdminOrgId();
+    const groups = await createShiftsForTeacher(teacherId, names, orgId);
+    const group = groups[groups.length - 1];
 
-    return NextResponse.json({ group }, { status: 201 });
+    return NextResponse.json({ group, groups }, { status: 201 });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ошибка";
     return NextResponse.json({ error: message }, { status: 500 });

@@ -28,9 +28,14 @@ import {
   listActiveTeachers,
   markStudentMonthPaid,
   searchStudents,
+  shiftPickKeyboard,
   studentResultKeyboard,
   teacherPickKeyboard,
 } from "@/lib/telegram/admin-assign";
+import {
+  createGroupForTeacher,
+  listGroupsForTeacher,
+} from "@/lib/groups";
 import {
   clearTgSession,
   getTgSession,
@@ -221,6 +226,62 @@ async function promptAssignTeacher(
   );
 }
 
+async function promptAssignShifts(
+  token: string,
+  chatId: number,
+  studentId: string,
+  teacherId: string,
+) {
+  const teacher = await getTeacherBrief(teacherId);
+  let groups = await listGroupsForTeacher(teacherId);
+  if (!groups.length) {
+    const created = await createGroupForTeacher({
+      teacher_id: teacherId,
+      name: "Основная смена",
+    });
+    groups = [created];
+  }
+
+  await setTgSession(chatId, "admin", "assign_pick_shift", {
+    student_id: studentId,
+    teacher_id: teacherId,
+  });
+
+  if (groups.length === 1) {
+    const result = await assignTeacherToStudent(studentId, teacherId, groups[0]!.id);
+    if (!result.ok) {
+      await sendMessage(token, chatId, `⚠️ ${result.error}`);
+      return;
+    }
+    const student = await getStudentBrief(studentId);
+    await sendMessage(
+      token,
+      chatId,
+      [
+        `✅ Закреплён`,
+        `👤 ${escapeHtml(student?.full_name || "—")}`,
+        `👨‍🏫 ${escapeHtml(teacher?.full_name || "—")}`,
+        `📅 ${escapeHtml(groups[0]!.name)}`,
+        ``,
+        `Если нужны ещё смены — «➕ Новая смена».`,
+      ].join("\n"),
+      { reply_markup: shiftPickKeyboard(groups) },
+    );
+    return;
+  }
+
+  await sendMessage(
+    token,
+    chatId,
+    [
+      `📅 <b>Смены учителя</b> ${escapeHtml(teacher?.full_name || "")}`,
+      ``,
+      `Отметьте одну или несколько. Ученик может ходить на 1 смену или на 5–6.`,
+    ].join("\n"),
+    { reply_markup: shiftPickKeyboard(groups) },
+  );
+}
+
 async function doSearchAndShow(token: string, chatId: number, query: string) {
   const hits = await searchStudents(query, 10);
   if (!hits.length) {
@@ -298,7 +359,7 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
       return;
     }
 
-    // asg:t:{teacherId} — закрепить (student из session)
+    // asg:t:{teacherId} — выбрать смены этого учителя
     if (data.startsWith("asg:t:")) {
       const teacherId = data.slice("asg:t:".length);
       const session = await getTgSession(chatId, "admin");
@@ -312,28 +373,97 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
         );
         return;
       }
+      await answerCallback(token, cbId);
+      await promptAssignShifts(token, chatId, studentId, teacherId);
+      return;
+    }
 
-      const result = await assignTeacherToStudent(studentId, teacherId);
+    if (data === "asg:done") {
+      await clearTgSession(chatId, "admin");
+      await answerCallback(token, cbId, "Готово");
+      await sendMessage(token, chatId, "✅ Смены сохранены.", {
+        reply_markup: adminKeyboard(),
+      });
+      return;
+    }
+
+    if (data === "asg:newshift") {
+      const session = await getTgSession(chatId, "admin");
+      const studentId = String(session.data.student_id || "");
+      const teacherId = String(session.data.teacher_id || "");
+      if (!studentId || !teacherId) {
+        await answerCallback(token, cbId, "Сначала учитель");
+        return;
+      }
+      await setTgSession(chatId, "admin", "assign_new_shift", {
+        student_id: studentId,
+        teacher_id: teacherId,
+      });
+      await answerCallback(token, cbId);
+      await sendMessage(
+        token,
+        chatId,
+        "➕ Название новой смены?\nПример: <code>Вечер 18:30</code> или <code>Сб 11:00</code>\nОтмена: /cancel",
+      );
+      return;
+    }
+
+    if (data === "asg:gall") {
+      const session = await getTgSession(chatId, "admin");
+      const studentId = String(session.data.student_id || "");
+      const teacherId = String(session.data.teacher_id || "");
+      if (!studentId || !teacherId) {
+        await answerCallback(token, cbId, "Сначала ученик и учитель");
+        return;
+      }
+      const result = await assignTeacherToStudent(studentId, teacherId, (
+        await listGroupsForTeacher(teacherId)
+      ).map((g) => g.id));
       if (!result.ok) {
         await answerCallback(token, cbId, "Ошибка");
         await sendMessage(token, chatId, `⚠️ ${result.error}`);
         return;
       }
-
       await clearTgSession(chatId, "admin");
+      await answerCallback(token, cbId, "Все смены");
       const student = await getStudentBrief(studentId);
       const teacher = await getTeacherBrief(teacherId);
-      await answerCallback(token, cbId, "Назначен");
       await sendMessage(
         token,
         chatId,
         [
-          `✅ <b>Учитель закреплён</b>`,
-          ``,
-          `👤 ${escapeHtml(student?.full_name || "—")} · <code>${escapeHtml(student?.student_code || "")}</code>`,
-          `👨‍🏫 ${escapeHtml(teacher?.full_name || "—")} · <code>${escapeHtml(teacher?.teacher_code || "")}</code>`,
+          `✅ Ученик закреплён на <b>всех сменах</b> учителя`,
+          `👤 ${escapeHtml(student?.full_name || "—")}`,
+          `👨‍🏫 ${escapeHtml(teacher?.full_name || "—")}`,
         ].join("\n"),
         { reply_markup: adminKeyboard() },
+      );
+      return;
+    }
+
+    if (data.startsWith("asg:g:")) {
+      const groupId = data.slice("asg:g:".length);
+      const session = await getTgSession(chatId, "admin");
+      const studentId = String(session.data.student_id || "");
+      const teacherId = String(session.data.teacher_id || "");
+      if (!studentId || !teacherId) {
+        await answerCallback(token, cbId, "Сначала ученик");
+        return;
+      }
+      const result = await assignTeacherToStudent(studentId, teacherId, groupId);
+      if (!result.ok) {
+        await answerCallback(token, cbId, "Ошибка");
+        await sendMessage(token, chatId, `⚠️ ${result.error}`);
+        return;
+      }
+      await answerCallback(token, cbId, "Смена добавлена");
+      const groups = await listGroupsForTeacher(teacherId);
+      const picked = groups.find((g) => g.id === groupId);
+      await sendMessage(
+        token,
+        chatId,
+        `📅 Смена <b>${escapeHtml(picked?.name || "")}</b> закреплена.\nМожно отметить ещё или «Готово».`,
+        { reply_markup: shiftPickKeyboard(groups) },
       );
       return;
     }
@@ -494,16 +624,94 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
       );
       return;
     }
+    if (session.state === "assign_new_shift") {
+      if (isCancelText(text)) {
+        const studentId = String(session.data.student_id || "");
+        const teacherId = String(session.data.teacher_id || "");
+        if (studentId && teacherId) {
+          await promptAssignShifts(token, chatId, studentId, teacherId);
+        } else {
+          await clearTgSession(chatId, "admin");
+          await sendMessage(token, chatId, "Отменено.", {
+            reply_markup: adminKeyboard(),
+          });
+        }
+        return;
+      }
+      const studentId = String(session.data.student_id || "");
+      const teacherId = String(session.data.teacher_id || "");
+      const name = text.trim();
+      if (!studentId || !teacherId || name.length < 1) {
+        await sendMessage(token, chatId, "Введите название смены.");
+        return;
+      }
+      try {
+        const group = await createGroupForTeacher({
+          teacher_id: teacherId,
+          name,
+        });
+        await assignTeacherToStudent(studentId, teacherId, group.id);
+        await sendMessage(
+          token,
+          chatId,
+          `📅 Смена <b>${escapeHtml(group.name)}</b> создана и ученик на неё посажен.`,
+        );
+        await promptAssignShifts(token, chatId, studentId, teacherId);
+      } catch (e) {
+        await sendMessage(
+          token,
+          chatId,
+          `❌ ${e instanceof Error ? e.message : "Ошибка"}`,
+        );
+      }
+      return;
+    }
+
     if (session.state === "new_teacher_phone") {
+      if (isCancelText(text)) {
+        await clearTgSession(chatId, "admin");
+        await sendMessage(token, chatId, "Отменено.", {
+          reply_markup: adminKeyboard(),
+        });
+        return;
+      }
+      await patchTgSession(chatId, "admin", "new_teacher_shifts", {
+        full_name: String(session.data.full_name || "").trim(),
+        phone: text === "-" ? "" : text.trim(),
+      });
+      await sendMessage(
+        token,
+        chatId,
+        [
+          "📅 <b>Смены учителя</b>",
+          "",
+          "Через запятую, например:",
+          "<code>Утро 09:00, Вечер 18:30, Сб 11:00</code>",
+          "",
+          "Или «-» — одна основная смена.",
+        ].join("\n"),
+      );
+      return;
+    }
+
+    if (session.state === "new_teacher_shifts") {
+      if (isCancelText(text)) {
+        await clearTgSession(chatId, "admin");
+        await sendMessage(token, chatId, "Отменено.", {
+          reply_markup: adminKeyboard(),
+        });
+        return;
+      }
       const full = String(session.data.full_name || "").trim();
       const { last_name, first_name } = splitPersonName(full);
-      const phone = text === "-" ? undefined : text.trim();
+      const phone = String(session.data.phone || "").trim() || undefined;
+      const shifts = text === "-" ? "Основная смена" : text.trim();
       try {
         const teacher = await createTeacher({
           first_name: first_name || "Новый",
           last_name: last_name || "Учитель",
           phone,
-          group_name: `Группа ${last_name || "новая"}`,
+          group_name: shifts,
         });
         // best-effort password_plain
         const supabase = getSupabaseServerClient();
@@ -526,6 +734,9 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
             `👤 ${escapeHtml(teacher.full_name)}`,
             `🔑 <code>${escapeHtml(teacher.teacher_code)}</code>`,
             `🔐 <code>${escapeHtml(teacher.plain_password)}</code>`,
+            `📅 Смены: ${escapeHtml(
+              (teacher.shifts ?? []).map((s) => s.name).join(", ") || "Основная смена",
+            )}`,
             ``,
             `Передайте код и пароль учителю.`,
             `Вход в TG: ${teacherBot}`,
@@ -640,6 +851,7 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
         ``,
         `📝 Заявки → Принять / Отклонить`,
         `➕ Ученик / ➕ Учитель — создать в боте`,
+        `📅 У учителя несколько смен: ученика можно посадить на 1 или на 5–6`,
         `👨‍🏫 После принятия → «Назначить учителя»`,
         `🔍 Быстрый поиск ученика → назначить учителя`,
         `🔗 /assign — то же`,

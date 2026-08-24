@@ -116,10 +116,11 @@ export default function AdminTeachersPage() {
       title="Учителя"
       description={
         <>
-          Шаг 1: добавьте учителя. Код и пароль — для входа в{" "}
-          <Link href="/teacher/login" className="font-medium text-indigo-600 underline">
-            кабинет учителя
-          </Link>
+          Шаг 1: добавьте учителя и его смены. Потом на{" "}
+          <Link href="/admin/students" className="font-medium text-emerald-600 underline">
+            учениках
+          </Link>{" "}
+          можно добавлять новых и закреплять на одну или несколько смен.
         </>
       }
     >
@@ -158,13 +159,17 @@ export default function AdminTeachersPage() {
             />
           </div>
           <div>
-            <label className="lc-label">Название первой группы</label>
+            <label className="lc-label">Смены</label>
             <input
               value={groupName}
               onChange={(e) => setGroupName(e.target.value)}
               className="lc-input"
-              placeholder="Напр. A1 Утро (необязательно)"
+              placeholder="Утро 09:00, Вечер 18:30, Сб 11:00"
             />
+            <p className="mt-1 text-xs text-slate-500">
+              Через запятую. У одного учителя может быть 1 смена или 5–6.
+              Потом можно добавить ещё.
+            </p>
           </div>
           {error && <p className="lc-alert lc-alert-error">{error}</p>}
           <button
@@ -191,13 +196,20 @@ export default function AdminTeachersPage() {
                   credentials: "include",
                   body: JSON.stringify({
                     teacher_id: extraGroupTeacher,
-                    name: extraGroupName.trim(),
+                    names: extraGroupName.split(/[,;\n]+/).map((s) => s.trim()),
                   }),
                 });
                 const data = await res.json();
                 if (!res.ok) throw new Error(data.error || "Ошибка");
                 setExtraGroupName("");
-                alert(`Группа «${data.group.name}» создана`);
+                const created = (data.groups ?? [data.group])
+                  .map((g: { name?: string }) => g?.name)
+                  .filter(Boolean);
+                alert(
+                  created.length
+                    ? `Смены: ${created.join(", ")}`
+                    : "Смена создана",
+                );
               } catch (err) {
                 setError(err instanceof Error ? err.message : "Ошибка");
               } finally {
@@ -206,10 +218,10 @@ export default function AdminTeachersPage() {
             }}
           >
             <h2 className="text-base font-bold text-slate-900">
-              Добавить ещё группу учителю
+              Добавить смены учителю
             </h2>
             <p className="text-sm text-slate-500">
-              Один учитель может вести несколько групп (A1, A2, Kids…).
+              Ученика потом можно посадить на одну смену или сразу на несколько.
             </p>
             <div>
               <label className="lc-label">Учитель *</label>
@@ -228,21 +240,24 @@ export default function AdminTeachersPage() {
               </select>
             </div>
             <div>
-              <label className="lc-label">Название группы *</label>
+              <label className="lc-label">Названия смен *</label>
               <input
                 value={extraGroupName}
                 onChange={(e) => setExtraGroupName(e.target.value)}
                 required
                 className="lc-input"
-                placeholder="A2 Вечер"
+                placeholder="Вечер 18:30, Сб 11:00"
               />
+              <p className="mt-1 text-xs text-slate-500">
+                Можно несколько через запятую.
+              </p>
             </div>
             <button
               type="submit"
               disabled={extraLoading}
               className="lc-btn lc-btn-ghost px-5 py-2.5 disabled:opacity-50"
             >
-              {extraLoading ? "Создание…" : "Создать группу"}
+              {extraLoading ? "Создание…" : "Добавить смены"}
             </button>
           </form>
         )}

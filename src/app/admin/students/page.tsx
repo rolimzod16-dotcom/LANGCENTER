@@ -79,7 +79,7 @@ export default function AdminStudentsPage() {
   const [listError, setListError] = useState("");
 
   const [teacherId, setTeacherId] = useState("");
-  const [groupId, setGroupId] = useState("");
+  const [groupIds, setGroupIds] = useState<string[]>([]);
   const [groups, setGroups] = useState<{ id: string; name: string }[]>([]);
   const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
@@ -192,7 +192,7 @@ export default function AdminStudentsPage() {
   useEffect(() => {
     if (!teacherId) {
       setGroups([]);
-      setGroupId("");
+      setGroupIds([]);
       return;
     }
     fetch(`/api/groups?teacher_id=${encodeURIComponent(teacherId)}`, {
@@ -200,13 +200,13 @@ export default function AdminStudentsPage() {
     })
       .then((r) => r.json())
       .then((data) => {
-        const list = data.groups ?? [];
+        const list = (data.groups ?? []) as { id: string; name: string }[];
         setGroups(list);
-        setGroupId(list[0]?.id ?? "");
+        setGroupIds(list.length === 1 && list[0] ? [list[0].id] : []);
       })
       .catch(() => {
         setGroups([]);
-        setGroupId("");
+        setGroupIds([]);
       });
   }, [teacherId]);
 
@@ -234,6 +234,10 @@ export default function AdminStudentsPage() {
       setError("Выберите учителя");
       return;
     }
+    if (groups.length > 1 && groupIds.length === 0) {
+      setError("Выберите хотя бы одну смену");
+      return;
+    }
     setLoading(true);
     try {
       const { first_name, last_name } = parseFullName(fullName);
@@ -245,7 +249,7 @@ export default function AdminStudentsPage() {
           last_name,
           phone: phone || undefined,
           teacher_id: teacherId,
-          group_id: groupId || undefined,
+          group_ids: groupIds,
           monthly_fee: Number(monthlyFee) || 500000,
           start_date: startDate,
           payment_due_day: Number(paymentDueDay) || 10,
@@ -353,7 +357,8 @@ export default function AdminStudentsPage() {
       title="Ученики"
       description={
         <>
-          Шаг 2: выберите учителя и добавьте ученика. Код и пароль — для{" "}
+          Шаг 2: учитель уже есть — добавляйте учеников и сажайте на смены.
+          Один ученик может ходить на 1 смену или на 5–6. Код и пароль — для{" "}
           <Link href="/student/login" className="font-medium text-emerald-600 underline">
             кабинета ученика
           </Link>
@@ -409,18 +414,40 @@ export default function AdminStudentsPage() {
           </div>
           {teacherId && groups.length > 0 && (
             <div>
-              <label className="lc-label">Группа</label>
-              <select
-                value={groupId}
-                onChange={(e) => setGroupId(e.target.value)}
-                className="lc-input"
-              >
-                {groups.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.name}
-                  </option>
-                ))}
-              </select>
+              <label className="lc-label">Смены ученика</label>
+              <div className="flex flex-wrap gap-2">
+                {groups.map((g) => {
+                  const on = groupIds.includes(g.id);
+                  return (
+                    <label
+                      key={g.id}
+                      className={`cursor-pointer rounded-full border px-3 py-1.5 text-sm ${
+                        on
+                          ? "border-emerald-300 bg-emerald-50 font-semibold text-emerald-800"
+                          : "border-slate-200 bg-white text-slate-600"
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        className="mr-1.5 align-middle"
+                        checked={on}
+                        onChange={() =>
+                          setGroupIds((prev) =>
+                            on
+                              ? prev.filter((id) => id !== g.id)
+                              : [...prev, g.id],
+                          )
+                        }
+                      />
+                      {g.name}
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="mt-1 text-xs text-slate-500">
+                Можно отметить несколько. Если не выбрать — ученик попадёт на
+                единственную смену учителя (если она одна).
+              </p>
             </div>
           )}
           <div>

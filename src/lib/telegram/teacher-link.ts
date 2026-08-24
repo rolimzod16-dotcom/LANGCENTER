@@ -1,6 +1,6 @@
 import { loginTeacher } from "@/lib/teachers";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
-import { getStudentIdsForTeacher } from "@/lib/groups";
+import { getTeacherStudents } from "@/lib/groups";
 
 export async function linkTeacherTelegram(
   code: string,
@@ -56,24 +56,13 @@ export async function findTeacherByChatId(chatId: number) {
 }
 
 export async function listTeacherStudents(teacherId: string) {
-  const supabase = getSupabaseServerClient();
-  if (!supabase) return [];
-
-  const ids = await getStudentIdsForTeacher(teacherId);
-  if (!ids.length) return [];
-
-  const { data, error } = await supabase
-    .from("students")
-    .select("id, full_name, student_code, phone, status")
-    .in("id", ids)
-    .order("full_name", { ascending: true });
-
-  if (error) throw new Error(error.message);
-  return (data ?? []) as Array<{
-    id: string;
-    full_name: string | null;
-    student_code: string;
-    phone: string | null;
-    status?: string | null;
-  }>;
+  const rows = await getTeacherStudents(teacherId);
+  return rows.map((s) => ({
+    id: s.id,
+    full_name: s.full_name,
+    student_code: s.student_code,
+    phone: s.phone,
+    status: "active" as string | null,
+    group_name: s.group_name,
+  }));
 }

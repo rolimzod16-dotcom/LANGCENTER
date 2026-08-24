@@ -8,6 +8,8 @@ type Student = {
   id: string;
   full_name: string;
   student_code: string;
+  group_name?: string;
+  group_names?: string[];
 };
 
 type AttendanceStatus = "present" | "absent" | "late";
@@ -36,6 +38,7 @@ export default function TeacherDashboardPage() {
     Record<string, AttendanceStatus>
   >({});
   const [search, setSearch] = useState("");
+  const [shiftFilter, setShiftFilter] = useState("all");
   const [loading, setLoading] = useState(true);
   const [markingAll, setMarkingAll] = useState(false);
   const [error, setError] = useState("");
@@ -68,15 +71,29 @@ export default function TeacherDashboardPage() {
     load();
   }, []);
 
+  const shiftNames = useMemo(() => {
+    const names = new Set<string>();
+    for (const s of students) {
+      for (const n of s.group_names ?? (s.group_name ? [s.group_name] : [])) {
+        if (n) names.add(n);
+      }
+    }
+    return [...names].sort((a, b) => a.localeCompare(b, "ru"));
+  }, [students]);
+
   const filteredStudents = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return students;
-    return students.filter(
-      (s) =>
+    return students.filter((s) => {
+      const names = s.group_names ?? (s.group_name ? [s.group_name] : []);
+      if (shiftFilter !== "all" && !names.includes(shiftFilter)) return false;
+      if (!q) return true;
+      return (
         s.full_name.toLowerCase().includes(q) ||
-        s.student_code.toLowerCase().includes(q),
-    );
-  }, [students, search]);
+        s.student_code.toLowerCase().includes(q) ||
+        names.some((n) => n.toLowerCase().includes(q))
+      );
+    });
+  }, [students, search, shiftFilter]);
 
   const markedToday = students.filter((s) => todayAttendance[s.id]).length;
 
@@ -107,7 +124,7 @@ export default function TeacherDashboardPage() {
     setMarkingAll(true);
     setError("");
     setSuccess("");
-    const ids = students
+    const ids = filteredStudents
       .filter((s) => todayAttendance[s.id] !== "present")
       .map((s) => s.id);
     if (ids.length === 0) {
@@ -184,7 +201,8 @@ export default function TeacherDashboardPage() {
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
               <h2 className="text-lg font-bold text-slate-900">
-                Мои ученики ({students.length})
+                Мои ученики ({filteredStudents.length}
+                {shiftFilter !== "all" ? ` · ${shiftFilter}` : ` / ${students.length}`})
               </h2>
               <p className="mt-1 text-sm text-slate-500">
                 Отмечено сегодня: {markedToday} из {students.length}
@@ -202,11 +220,41 @@ export default function TeacherDashboardPage() {
             )}
           </div>
 
+          {shiftNames.length > 1 && (
+            <div className="mb-3 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => setShiftFilter("all")}
+                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                  shiftFilter === "all"
+                    ? "border-indigo-300 bg-indigo-50 text-indigo-800"
+                    : "border-slate-200 bg-white text-slate-600"
+                }`}
+              >
+                Все смены
+              </button>
+              {shiftNames.map((name) => (
+                <button
+                  key={name}
+                  type="button"
+                  onClick={() => setShiftFilter(name)}
+                  className={`rounded-full border px-3 py-1 text-xs font-semibold ${
+                    shiftFilter === name
+                      ? "border-indigo-300 bg-indigo-50 text-indigo-800"
+                      : "border-slate-200 bg-white text-slate-600"
+                  }`}
+                >
+                  {name}
+                </button>
+              ))}
+            </div>
+          )}
+
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Поиск по имени или коду…"
+            placeholder="Поиск по имени, коду или смене…"
             className="lc-input mb-4"
           />
 
@@ -232,6 +280,11 @@ export default function TeacherDashboardPage() {
                         <p className="font-mono text-sm text-indigo-600">
                           {s.student_code}
                         </p>
+                        {s.group_name ? (
+                          <p className="mt-1 text-xs text-slate-500">
+                            Смены: {s.group_name}
+                          </p>
+                        ) : null}
                       </div>
                       {todayStatus && (
                         <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">

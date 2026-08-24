@@ -158,10 +158,10 @@ export default function StudentDashboardPage() {
             ) : (
               <ul className="mt-3 space-y-2">
                 {data.teachers.map((t, i) => (
-                  <li key={i} className="lc-card p-4">
+                  <li key={`${t.teacher_name}-${t.group_name}-${i}`} className="lc-card p-4">
                     <p className="font-bold text-slate-900">{t.teacher_name}</p>
                     <p className="text-sm text-slate-500">
-                      Группа: {t.group_name}
+                      Смена: {t.group_name}
                     </p>
                   </li>
                 ))}

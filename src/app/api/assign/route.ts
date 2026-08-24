@@ -6,7 +6,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json();
     const studentId = String(body.student_id ?? "");
     const teacherId = String(body.teacher_id ?? "");
-    const groupId = body.group_id ? String(body.group_id) : undefined;
+    const groupIds = Array.isArray(body.group_ids)
+      ? body.group_ids.map((id: unknown) => String(id).trim()).filter(Boolean)
+      : body.group_id
+        ? [String(body.group_id).trim()]
+        : [];
 
     if (!studentId || !teacherId) {
       return NextResponse.json(
@@ -15,7 +19,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const result = await assignStudentToTeacher(studentId, teacherId, groupId);
+    const result = await assignStudentToTeacher(
+      studentId,
+      teacherId,
+      groupIds.length ? groupIds : undefined,
+    );
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Ошибка";

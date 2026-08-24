@@ -45,6 +45,32 @@ export async function listAllGroups(orgId?: string | null) {
   return data ?? [];
 }
 
+export type GroupRow = {
+  id: string;
+  name: string;
+  level: string | null;
+  teacher_id: string | null;
+  created_at?: string;
+};
+
+/** «Утро 09:00, Вечер 18:30» / с новой строки → список смен */
+export function parseShiftNames(raw?: string | null): string[] {
+  if (!raw) return [];
+  const trimmed = raw.trim();
+  if (!trimmed || trimmed === "-") return [];
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const part of trimmed.split(/[,;\n]+/)) {
+    const name = part.trim().replace(/\s+/g, " ");
+    if (name.length < 1) continue;
+    const key = name.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(name);
+  }
+  return out;
+}
+
 export async function createGroupForTeacher(input: {
   teacher_id: string;
   name: string;
@@ -54,13 +80,24 @@ export async function createGroupForTeacher(input: {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");
 
+  const name = input.name.trim();
+  if (!name) throw new Error("Название смены обязательно");
+
+  const { data: existing } = await supabase
+    .from("groups")
+    .select("id, name, level, teacher_id")
+    .eq("teacher_id", input.teacher_id)
+    .ilike("name", name)
+    .maybeSingle();
+  if (existing) return existing as GroupRow;
+
   const orgFields = await orgInsertFields(
     input.organization_id ?? (await getAdminOrgId()),
   );
 
   const base = {
     teacher_id: input.teacher_id,
-    name: input.name.trim(),
+    name,
     level: input.level?.trim() || null,
   };
 
@@ -85,6 +122,26 @@ export async function createGroupForTeacher(input: {
   return data!;
 }
 
+export async function createShiftsForTeacher(
+  teacherId: string,
+  names: string[],
+  organizationId?: string | null,
+) {
+  const unique = parseShiftNames(names.join(", "));
+  const list = unique.length ? unique : ["Основная смена"];
+  const created: GroupRow[] = [];
+  for (const name of list) {
+    created.push(
+      await createGroupForTeacher({
+        teacher_id: teacherId,
+        name,
+        organization_id: organizationId,
+      }),
+    );
+  }
+  return created;
+}
+
 export async function assignStudentToGroup(studentId: string, groupId: string) {
   const supabase = getSupabaseServerClient();
   if (!supabase) throw new Error("Supabase не настроен");
@@ -101,48 +158,43 @@ export async function assignStudentToGroup(studentId: string, groupId: string) {
 export async function assignStudentToTeacher(
   studentId: string,
   teacherId: string,
-  groupId?: string,
+  groupId?: string | string[],
 ) {
-  const supabase = getSupabaseServerClient();
-  if (!supabase) throw new Error("Supabase не настроен");
+  const requested = (Array.isArray(groupId) ? groupId : groupId ? [groupId] : [])
+    .map((id) => String(id).trim())
+    .filter(Boolean);
 
-  let targetGroupId = groupId;
-
-  if (!targetGroupId) {
-    const { data: group, error: groupError } = await supabase
-      .from("groups")
-      .select("id")
-      .eq("teacher_id", teacherId)
-      .order("created_at", { ascending: true })
-      .limit(1)
-      .maybeSingle();
-
-    if (groupError) throw new Error(groupError.message);
-    if (!group) {
-      // Авто-группа, чтобы админ мог сразу закрепить ученика
-      const created = await createGroupForTeacher({
-        teacher_id: teacherId,
-        name: "Основная группа",
-      });
-      targetGroupId = created.id;
-    } else {
-      targetGroupId = group.id;
-    }
-  } else {
-    const { data: group, error } = await supabase
-      .from("groups")
-      .select("id, teacher_id")
-      .eq("id", targetGroupId)
-      .maybeSingle();
-    if (error) throw new Error(error.message);
-    if (!group) throw new Error("Группа не найдена");
-    if (group.teacher_id !== teacherId) {
-      throw new Error("Группа принадлежит другому учителю");
-    }
+  const groups = await listGroupsForTeacher(teacherId);
+  let available = groups;
+  if (!available.length) {
+    const created = await createGroupForTeacher({
+      teacher_id: teacherId,
+      name: "Основная смена",
+    });
+    available = [created];
   }
 
-  if (!targetGroupId) throw new Error("Группа не выбрана");
-  return assignStudentToGroup(studentId, targetGroupId);
+  let targets: string[];
+  if (requested.length) {
+    const allowed = new Set(available.map((g) => g.id));
+    targets = requested.filter((id) => allowed.has(id));
+    if (!targets.length) {
+      throw new Error("Смена не принадлежит этому учителю");
+    }
+  } else if (available.length === 1) {
+    targets = [available[0]!.id];
+  } else {
+    throw new Error(
+      "У учителя несколько смен — выберите одну или несколько",
+    );
+  }
+
+  const assigned: string[] = [];
+  for (const gid of targets) {
+    await assignStudentToGroup(studentId, gid);
+    assigned.push(gid);
+  }
+  return { group_id: assigned[0]!, group_ids: assigned };
 }
 
 /** Ученик закреплён за этим учителем (через любую его группу). */
@@ -363,5 +415,12 @@ export async function ensureDefaultGroupForTeacher(
     name: groupName,
     organization_id: organizationId,
   });
+}
+
+export async function getStudentShiftNames(
+  studentId: string,
+): Promise<string[]> {
+  const links = await getStudentTeachers(studentId);
+  return [...new Set(links.map((l) => l.group_name).filter(Boolean))];
 }
 

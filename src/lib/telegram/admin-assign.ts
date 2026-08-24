@@ -2,6 +2,8 @@ import { getSupabaseServerClient } from "@/lib/supabase/server";
 import { assignStudentToTeacher } from "@/lib/groups";
 import { escapeHtml, inlineKeyboard } from "@/lib/telegram/api";
 
+export type ShiftHit = { id: string; name: string };
+
 export type StudentHit = {
   id: string;
   full_name: string | null;
@@ -99,14 +101,22 @@ export async function getTeacherBrief(teacherId: string): Promise<TeacherHit | n
 export async function assignTeacherToStudent(
   studentId: string,
   teacherId: string,
-): Promise<{ ok: true; group_id: string } | { ok: false; error: string }> {
+  groupIds?: string | string[],
+): Promise<
+  | { ok: true; group_id: string; group_ids: string[] }
+  | { ok: false; error: string }
+> {
   try {
-    const result = await assignStudentToTeacher(studentId, teacherId);
+    const result = await assignStudentToTeacher(studentId, teacherId, groupIds);
     // fire-and-forget ping to teacher bot
     void import("@/lib/telegram/notify-events").then((m) =>
       m.notifyTeacherNewStudent(teacherId, studentId),
     );
-    return { ok: true, group_id: result.group_id };
+    return {
+      ok: true,
+      group_id: result.group_id,
+      group_ids: result.group_ids,
+    };
   } catch (e) {
     return {
       ok: false,
@@ -132,8 +142,7 @@ export function studentResultKeyboard(studentId: string) {
   return inlineKeyboard([
     [
       {
-        text: "👨‍🏫 Назначить учителя",
-        // asg:s:uuid = 6+36 = 42
+        text: "👨‍🏫 Назначить / смены",
         callback_data: `asg:s:${studentId}`,
       },
     ],
@@ -144,6 +153,26 @@ export function studentResultKeyboard(studentId: string) {
       },
     ],
   ]);
+}
+
+export function shiftPickKeyboard(groups: ShiftHit[]) {
+  const rows = groups.map((g) => [
+    {
+      text: `📅 ${g.name}`.slice(0, 60),
+      callback_data: `asg:g:${g.id}`,
+    },
+  ]);
+  if (groups.length > 1) {
+    rows.push([
+      { text: "✅ Все смены этого учителя", callback_data: "asg:gall" },
+    ]);
+  }
+  rows.push([
+    { text: "➕ Новая смена", callback_data: "asg:newshift" },
+    { text: "✅ Готово", callback_data: "asg:done" },
+  ]);
+  rows.push([{ text: "❌ Отмена", callback_data: "asg:cancel" }]);
+  return inlineKeyboard(rows);
 }
 
 /** Оплатить текущий месяц за ученика (ensure + mark paid). */

@@ -107,7 +107,9 @@ async function showStudents(token: string, chatId: number, teacherId: string) {
     await sendMessage(
       token,
       chatId,
-      `${mark} <b>${escapeHtml(s.full_name || "—")}</b>\n<code>${escapeHtml(s.student_code)}</code>`,
+      `${mark} <b>${escapeHtml(s.full_name || "—")}</b>\n<code>${escapeHtml(s.student_code)}</code>${
+        s.group_name ? `\n📅 ${escapeHtml(s.group_name)}` : ""
+      }`,
       {
         reply_markup: inlineKeyboard([
           [

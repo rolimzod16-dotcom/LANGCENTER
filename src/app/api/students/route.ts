@@ -136,7 +136,11 @@ export async function POST(request: NextRequest) {
       ? Number(body.payment_due_day)
       : undefined;
 
-    const groupId = body.group_id ? String(body.group_id).trim() : undefined;
+    const groupIds = Array.isArray(body.group_ids)
+      ? body.group_ids.map((id: unknown) => String(id).trim()).filter(Boolean)
+      : body.group_id
+        ? [String(body.group_id).trim()]
+        : [];
 
     const student = await createStudent({
       first_name: firstName,
@@ -148,7 +152,11 @@ export async function POST(request: NextRequest) {
       payment_due_day: paymentDueDay,
     });
 
-    await assignStudentToTeacher(student.id, teacherId, groupId);
+    await assignStudentToTeacher(
+      student.id,
+      teacherId,
+      groupIds.length ? groupIds : undefined,
+    );
 
     try {
       await ensureStudentPaymentForMonth(student.id);

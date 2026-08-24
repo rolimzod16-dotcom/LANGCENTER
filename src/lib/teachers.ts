@@ -1,6 +1,6 @@
 import bcrypt from "bcryptjs";
 import { customAlphabet } from "nanoid";
-import { ensureDefaultGroupForTeacher } from "@/lib/groups";
+import { createShiftsForTeacher, parseShiftNames } from "@/lib/groups";
 import { getAdminOrgId, orgInsertFields } from "@/lib/org";
 import { getSupabaseServerClient } from "@/lib/supabase/server";
 
@@ -79,6 +79,7 @@ export async function createTeacher(input: {
   email?: string;
   phone?: string;
   group_name?: string;
+  group_names?: string[];
   organization_id?: string | null;
 }) {
   const supabase = getSupabaseServerClient();
@@ -132,12 +133,20 @@ export async function createTeacher(input: {
 
   if (!teacher) throw new Error("Не удалось создать учителя");
 
-  const groupName = input.group_name?.trim() || `Группа ${input.last_name}`;
-  await ensureDefaultGroupForTeacher(teacher.id, groupName, orgId);
+  const shiftNames = [
+    ...(input.group_names ?? []),
+    ...parseShiftNames(input.group_name),
+  ];
+  const shifts = await createShiftsForTeacher(
+    teacher.id,
+    shiftNames.length ? shiftNames : ["Основная смена"],
+    orgId,
+  );
 
   return {
     ...teacher,
     plain_password: plainPassword,
+    shifts: shifts.map((s) => ({ id: s.id, name: s.name })),
   };
 }
 
