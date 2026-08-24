@@ -20,7 +20,7 @@ export async function listGroupsForTeacher(
       .select("id, name, level, teacher_id, created_at")
       .eq("teacher_id", teacherId)
       .order("name", { ascending: true });
-    data = fallback.data;
+    data = fallback.data as typeof data;
     error = fallback.error;
   }
 
