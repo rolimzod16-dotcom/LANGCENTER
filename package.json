@@ -10,7 +10,7 @@
     "audit:full": "node scripts/full-audit.mjs"
   },
   "engines": {
-    "node": ">=20"
+    "node": "20.x"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
