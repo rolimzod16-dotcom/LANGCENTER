@@ -8,7 +8,7 @@ import { readFileSync, writeFileSync, unlinkSync, existsSync } from "fs";
 import { execFileSync } from "child_process";
 import bcrypt from "bcryptjs";
 
-const BASE = "https://langcenter-tillojon.vercel.app";
+const BASE = "https://langcenter-tillojon.onrender.com";
 const TEACHER_CODE = "TCH-2026-FMZFHY";
 const TEACHER_PASS = "KhaReGjkac";
 const DAYS = 15;

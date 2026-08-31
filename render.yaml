@@ -23,7 +23,9 @@ services:
       - key: SESSION_SECRET
         sync: false
       - key: APP_URL
-        sync: false
+        value: https://langcenter-tillojon.onrender.com
+      - key: NEXT_PUBLIC_APP_URL
+        value: https://langcenter-tillojon.onrender.com
       - key: TELEGRAM_ADMIN_BOT_TOKEN
         sync: false
       - key: TELEGRAM_STUDENT_BOT_TOKEN

@@ -6,7 +6,7 @@ import { execFileSync } from "child_process";
 import { createClient } from "@supabase/supabase-js";
 import { randomBytes } from "crypto";
 
-const BASE = "https://langcenter-tillojon.vercel.app";
+const BASE = "https://langcenter-tillojon.onrender.com";
 
 function loadEnv(path) {
   const out = {};

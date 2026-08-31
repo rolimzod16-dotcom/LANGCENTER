@@ -155,7 +155,7 @@ console.log(
       full_name,
       teacher_code,
       password: plain_password,
-      login_url: "https://langcenter-tillojon.vercel.app/teacher/login",
+      login_url: "https://langcenter-tillojon.onrender.com/teacher/login",
     },
     null,
     2,

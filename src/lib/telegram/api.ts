@@ -42,12 +42,16 @@ export type InlineButton =
   | { text: string; web_app: { url: string } };
 
 export function appBaseUrl(): string {
-  return (
-    process.env.APP_URL?.replace(/\/$/, "") ||
-    process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
+  const raw =
+    process.env.APP_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    process.env.RENDER_EXTERNAL_URL ||
+    (process.env.RENDER_EXTERNAL_HOSTNAME
+      ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}`
+      : "") ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
-    "https://langcenter-tillojon.vercel.app"
-  );
+    "https://langcenter-tillojon.onrender.com";
+  return raw.replace(/\/$/, "");
 }
 
 export async function tgApi<T = unknown>(

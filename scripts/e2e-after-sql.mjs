@@ -6,7 +6,7 @@ import { readFileSync, writeFileSync, unlinkSync } from "fs";
 import { execSync } from "child_process";
 import { createClient } from "@supabase/supabase-js";
 
-const BASE = "https://langcenter-tillojon.vercel.app";
+const BASE = "https://langcenter-tillojon.onrender.com";
 
 function loadEnv(path) {
   const out = {};

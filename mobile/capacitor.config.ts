@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: "Lang Center",
   webDir: "www",
   server: {
-    url: "https://langcenter.vercel.app/app",
+    url: "https://langcenter-tillojon.onrender.com/app",
     cleartext: false,
     androidScheme: "https",
   },

@@ -8,7 +8,7 @@ const env = loadEnv(".env.local");
 const BASE = (
   process.env.BASE_URL ||
   env.APP_URL ||
-  "https://langcenter-tillojon.vercel.app"
+  "https://langcenter-tillojon.onrender.com"
 ).replace(/\/$/, "");
 const ADMIN_PASSWORD = env.ADMIN_PASSWORD;
 const stamp = Date.now().toString().slice(-6);

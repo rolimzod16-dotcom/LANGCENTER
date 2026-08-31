@@ -23,19 +23,19 @@ const pass = loadEnv(".env.local").ADMIN_PASSWORD;
 writeFileSync("tmp-admin.json", JSON.stringify({ password: pass }));
 
 const login = execSync(
-  'curl.exe -s -c tmp-adm.txt -X POST "https://langcenter-tillojon.vercel.app/api/admin/login" -H "Content-Type: application/json" --data-binary "@tmp-admin.json"',
+  'curl.exe -s -c tmp-adm.txt -X POST "https://langcenter-tillojon.onrender.com/api/admin/login" -H "Content-Type: application/json" --data-binary "@tmp-admin.json"',
   { encoding: "utf8" },
 );
 console.log("login:", login);
 
 const students = execSync(
-  'curl.exe -s -b tmp-adm.txt "https://langcenter-tillojon.vercel.app/api/students?limit=2"',
+  'curl.exe -s -b tmp-adm.txt "https://langcenter-tillojon.onrender.com/api/students?limit=2"',
   { encoding: "utf8" },
 );
 console.log("students:", students.slice(0, 400));
 
 const teachers = execSync(
-  'curl.exe -s -b tmp-adm.txt "https://langcenter-tillojon.vercel.app/api/teachers"',
+  'curl.exe -s -b tmp-adm.txt "https://langcenter-tillojon.onrender.com/api/teachers"',
   { encoding: "utf8" },
 );
 console.log("teachers:", teachers.slice(0, 300));

@@ -38,7 +38,7 @@ const out = execFileSync(
     "-s",
     "-X",
     "POST",
-    "https://langcenter-tillojon.vercel.app/api/telegram/setup",
+    "https://langcenter-tillojon.onrender.com/api/telegram/setup",
     "-H",
     `x-setup-secret: ${secret}`,
     "-H",
@@ -50,12 +50,12 @@ console.log(out);
 
 const admin = execFileSync(
   "curl.exe",
-  ["-s", "https://langcenter-tillojon.vercel.app/api/telegram/admin/webhook"],
+  ["-s", "https://langcenter-tillojon.onrender.com/api/telegram/admin/webhook"],
   { encoding: "utf8" },
 );
 const student = execFileSync(
   "curl.exe",
-  ["-s", "https://langcenter-tillojon.vercel.app/api/telegram/student/webhook"],
+  ["-s", "https://langcenter-tillojon.onrender.com/api/telegram/student/webhook"],
   { encoding: "utf8" },
 );
 console.log("admin endpoint", admin);
