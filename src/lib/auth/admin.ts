@@ -1,5 +1,4 @@
 import { cookies } from "next/headers";
-import { timingSafeEqual } from "crypto";
 import { authCookieOptions, AUTH_MAX_AGE_SECONDS } from "@/lib/auth/cookie-options";
 import {
   ADMIN_COOKIE,
@@ -10,21 +9,10 @@ import { signToken, tokenExpirySeconds } from "@/lib/auth/signed-token";
 import { DEFAULT_ORG_ID } from "@/lib/org-constants";
 
 export { ADMIN_COOKIE } from "@/lib/auth/admin-constants";
-
-function safeEqual(a: string, b: string): boolean {
-  if (a.length !== b.length) return false;
-  return timingSafeEqual(Buffer.from(a), Buffer.from(b));
-}
-
-export function isAdminPasswordConfigured(): boolean {
-  return Boolean(process.env.ADMIN_PASSWORD?.trim());
-}
-
-export function verifyAdminPassword(password: string): boolean {
-  const expected = process.env.ADMIN_PASSWORD?.trim();
-  if (!expected) return false;
-  return safeEqual(password, expected);
-}
+export {
+  isAdminPasswordConfigured,
+  verifyAdminPassword,
+} from "@/lib/auth/password";
 
 export async function setAdminSession(orgId: string | null = DEFAULT_ORG_ID) {
   const jar = await cookies();

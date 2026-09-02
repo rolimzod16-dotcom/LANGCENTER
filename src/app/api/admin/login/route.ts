@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
+import { ADMIN_COOKIE } from "@/lib/auth/admin-constants";
+import { authCookieOptions, AUTH_MAX_AGE_SECONDS } from "@/lib/auth/cookie-options";
 import {
-  ADMIN_COOKIE,
   isAdminPasswordConfigured,
   verifyAdminPassword,
-} from "@/lib/auth/admin";
-import { authCookieOptions, AUTH_MAX_AGE_SECONDS } from "@/lib/auth/cookie-options";
+} from "@/lib/auth/password";
 import { signToken, tokenExpirySeconds } from "@/lib/auth/signed-token";
 import { DEFAULT_ORG_ID } from "@/lib/org-constants";
 
@@ -44,7 +44,11 @@ export async function POST(request: NextRequest) {
     res.cookies.set("lc_org", DEFAULT_ORG_ID, opts);
     return res;
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
     console.error("admin login failed", err);
-    return NextResponse.json({ error: "Ошибка входа" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Ошибка входа", detail: message },
+      { status: 500 },
+    );
   }
 }
