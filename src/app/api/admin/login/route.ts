@@ -44,11 +44,7 @@ export async function POST(request: NextRequest) {
     res.cookies.set("lc_org", DEFAULT_ORG_ID, opts);
     return res;
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
     console.error("admin login failed", err);
-    return NextResponse.json(
-      { error: "Ошибка входа", detail: message },
-      { status: 500 },
-    );
+    return NextResponse.json({ error: "Ошибка входа" }, { status: 500 });
   }
 }

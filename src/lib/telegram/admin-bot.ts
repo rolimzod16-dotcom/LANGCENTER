@@ -616,7 +616,7 @@ export async function handleAdminBotUpdate(update: TgUpdate): Promise<void> {
         });
         return;
       }
-      if (text.trim().length < 2) {
+      if (ADMIN_KEYBOARD_LABELS.includes(text) || text.trim().length < 2) {
         await sendMessage(token, chatId, "Введите имя и фамилию учителя.");
         return;
       }
