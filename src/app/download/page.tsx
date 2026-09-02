@@ -34,7 +34,7 @@ export default function DownloadPage() {
             Это стандартная защита Android для APK не из Google Play. Lang Center
             — ваше приложение центра. Нажмите{" "}
             <strong>«Загрузить всё равно»</strong> — файл скачивается с{" "}
-            <strong>langcenter-tillojon.onrender.com</strong>, не со стороннего сайта.
+            <strong>langcenter-tillojon.vercel.app</strong>, не со стороннего сайта.
           </p>
         </div>
 

@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
+  ADMIN_COOKIE,
   isAdminPasswordConfigured,
-  setAdminSession,
   verifyAdminPassword,
 } from "@/lib/auth/admin";
+import { authCookieOptions, AUTH_MAX_AGE_SECONDS } from "@/lib/auth/cookie-options";
+import { signToken, tokenExpirySeconds } from "@/lib/auth/signed-token";
+import { DEFAULT_ORG_ID } from "@/lib/org-constants";
+
+export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   try {
@@ -27,9 +32,19 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    await setAdminSession();
-    return NextResponse.json({ ok: true });
-  } catch {
+    const token = await signToken({
+      role: "admin",
+      org_id: DEFAULT_ORG_ID,
+      exp: tokenExpirySeconds(AUTH_MAX_AGE_SECONDS),
+      v: 1,
+    });
+    const res = NextResponse.json({ ok: true });
+    const opts = authCookieOptions();
+    res.cookies.set(ADMIN_COOKIE, token, opts);
+    res.cookies.set("lc_org", DEFAULT_ORG_ID, opts);
+    return res;
+  } catch (err) {
+    console.error("admin login failed", err);
     return NextResponse.json({ error: "Ошибка входа" }, { status: 500 });
   }
 }

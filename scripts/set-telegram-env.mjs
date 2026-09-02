@@ -66,7 +66,7 @@ const webhookSecret =
   randomBytes(24).toString("hex");
 const appUrl =
   String(secrets.app_url || "").trim() ||
-  "https://langcenter-tillojon.onrender.com";
+  "https://langcenter-tillojon.vercel.app";
 
 if (!adminToken || !studentToken) {
   console.error("tokens required");

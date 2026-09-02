@@ -45,12 +45,11 @@ export function appBaseUrl(): string {
   const raw =
     process.env.APP_URL ||
     process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.RENDER_EXTERNAL_URL ||
-    (process.env.RENDER_EXTERNAL_HOSTNAME
-      ? `https://${process.env.RENDER_EXTERNAL_HOSTNAME}`
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL
+      ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`
       : "") ||
     (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "") ||
-    "https://langcenter-tillojon.onrender.com";
+    "https://langcenter-tillojon.vercel.app";
   return raw.replace(/\/$/, "");
 }
 

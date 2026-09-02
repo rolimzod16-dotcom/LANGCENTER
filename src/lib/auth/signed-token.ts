@@ -27,7 +27,11 @@ function base64UrlToArrayBuffer(value: string): ArrayBuffer {
 }
 
 function utf8ToArrayBuffer(value: string): ArrayBuffer {
-  return new TextEncoder().encode(value).buffer;
+  const bytes = new TextEncoder().encode(value);
+  return bytes.buffer.slice(
+    bytes.byteOffset,
+    bytes.byteOffset + bytes.byteLength,
+  );
 }
 
 async function importHmacKey(secret: string): Promise<CryptoKey> {
